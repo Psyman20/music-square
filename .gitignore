@@ -15,3 +15,16 @@ export_credentials.cfg
 .mono/
 data_*/
 mono_crash.*.json
+
+# Android Gradle build & caches
+.gradle/
+**/android/build/.gradle/
+**/android/build/build/
+**/android/build/local.properties
+
+# Exported binaries & Keystores (keep private / off GitHub)
+build/
+*.apk
+*.aab
+*.keystore
+*.jks

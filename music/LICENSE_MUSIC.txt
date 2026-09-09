@@ -1,0 +1,28 @@
+All background music tracks are CC0 1.0 Universal (Public Domain / 100% Royalty-Free & Copyright-Free).
+
+============================================================
+ARTIST: Komiku
+License: CC0 1.0 Universal (Public Domain) - https://creativecommons.org/publicdomain/zero/1.0/
+============================================================
+
+Track: Poupi Great Adventures - The Arcade Game (arcade_menu.ogg)
+Source: https://archive.org/download/Komiku-Poupis_incredible_adventures/Komiku_-_29_-_Poupi_Great_Adventures__The_Arcade_Game.ogg
+
+Track: Battle Theme (battle_theme.ogg)
+Source: https://archive.org/download/Komiku-ItsTimeForAdventureVol2/Komiku_-_03_-_Battle_Theme.ogg
+
+
+============================================================
+ARTIST: Juhani Junkala (SubspaceAudio)
+License: CC0 1.0 Universal (Public Domain) - https://creativecommons.org/publicdomain/zero/1.0/
+Pack: Retro Game Music Pack (5 Action Chiptunes)
+Website: https://opengameart.org/content/5-chiptunes-action
+============================================================
+
+Track: Title Screen (jj_title.ogg)
+Track: Level 1 - The Beginning (jj_level1.ogg)
+Track: Level 2 - Underground (jj_level2.ogg)
+Track: Level 3 - Sky High (jj_level3.ogg)
+
+
+

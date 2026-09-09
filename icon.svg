@@ -1,0 +1,45 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <filter id="glow-red" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur"/>
+      <feFlood flood-color="#FF3060" flood-opacity="0.85" result="color"/>
+      <feComposite in="color" in2="blur" operator="in" result="glow"/>
+      <feMerge><feMergeNode in="glow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-yellow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur"/>
+      <feFlood flood-color="#FFD700" flood-opacity="0.85" result="color"/>
+      <feComposite in="color" in2="blur" operator="in" result="glow"/>
+      <feMerge><feMergeNode in="glow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-green" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur"/>
+      <feFlood flood-color="#00FF88" flood-opacity="0.85" result="color"/>
+      <feComposite in="color" in2="blur" operator="in" result="glow"/>
+      <feMerge><feMergeNode in="glow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-blue" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur"/>
+      <feFlood flood-color="#1E9FFF" flood-opacity="0.85" result="color"/>
+      <feComposite in="color" in2="blur" operator="in" result="glow"/>
+      <feMerge><feMergeNode in="glow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-white" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur"/>
+      <feFlood flood-color="#FFFFFF" flood-opacity="0.9" result="color"/>
+      <feComposite in="color" in2="blur" operator="in" result="glow"/>
+      <feMerge><feMergeNode in="glow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <radialGradient id="ambient" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#3A1A5A" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#130B22" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="128" height="128" rx="22" fill="#130B22"/>
+  <rect width="128" height="128" rx="22" fill="url(#ambient)"/>
+  <rect x="44" y="5" width="40" height="40" rx="9" fill="#FF3060" filter="url(#glow-red)"/>
+  <rect x="44" y="83" width="40" height="40" rx="9" fill="#FFD700" filter="url(#glow-yellow)"/>
+  <rect x="5" y="44" width="40" height="40" rx="9" fill="#00EE77" filter="url(#glow-green)"/>
+  <rect x="83" y="44" width="40" height="40" rx="9" fill="#1E9FFF" filter="url(#glow-blue)"/>
+  <rect x="44" y="44" width="40" height="40" rx="9" fill="#FFFFFF" filter="url(#glow-white)"/>
+</svg>

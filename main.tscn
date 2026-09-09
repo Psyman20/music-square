@@ -1,0 +1,597 @@
+[gd_scene format=3 uid="uid://bdtvy1winsayt"]
+
+[ext_resource type="Script" uid="uid://cbulkp45c2n4d" path="res://main.gd" id="1_main"]
+[ext_resource type="Script" uid="uid://bae6pwefad8f4" path="res://gamesettings.gd" id="3_settings"]
+[ext_resource type="Script" uid="uid://cm3pvsh48dj6d" path="res://sound_manager.gd" id="4_sfx"]
+
+[node name="Main" type="Control" unique_id=1502501818]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("1_main")
+
+[node name="Admob" type="Node" parent="." unique_id=1948201948]
+
+[node name="Background" type="ColorRect" parent="." unique_id=1916831798]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.18, 0.15, 0.28, 1)
+
+[node name="Settings" type="Node" parent="." unique_id=1502135056]
+script = ExtResource("3_settings")
+
+[node name="SoundManager" type="Node" parent="." unique_id=1112976465]
+script = ExtResource("4_sfx")
+
+[node name="TransitionOverlay" type="ColorRect" parent="." unique_id=1351237380]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 1)
+
+[node name="MenuScreen" type="Control" parent="." unique_id=1823525811]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="TitleLabel" type="Label" parent="MenuScreen" unique_id=1287278755]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -300.0
+offset_top = 160.0
+offset_right = 300.0
+offset_bottom = 290.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 56
+text = "MUSIC"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="TitleLabel2" type="Label" parent="MenuScreen" unique_id=1465531841]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -300.0
+offset_top = 268.0
+offset_right = 300.0
+offset_bottom = 428.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(1, 0.278, 0.341, 1)
+theme_override_font_sizes/font_size = 80
+text = "SQUARE"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="StartButton" type="Button" parent="MenuScreen" unique_id=1785190460]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -120.0
+offset_top = 470.0
+offset_right = 120.0
+offset_bottom = 530.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 28
+text = "PLAY"
+flat = true
+
+[node name="StartButtonBg" type="ColorRect" parent="MenuScreen/StartButton" unique_id=218704125]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+color = Color(1, 0.278, 0.341, 0.25)
+
+[node name="VersionLabel" type="Label" parent="MenuScreen" unique_id=1779753602]
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -50.0
+offset_top = -40.0
+offset_right = 50.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 14
+text = "v1.0.0"
+horizontal_alignment = 1
+
+[node name="GameScreen" type="Control" parent="." unique_id=1067650203]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="GameHUD" type="Control" parent="GameScreen" unique_id=2070260931]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 100.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+
+[node name="PauseButton" type="Button" parent="GameScreen/GameHUD" unique_id=2090486236]
+layout_mode = 0
+offset_left = 15.0
+offset_top = 15.0
+offset_right = 55.0
+offset_bottom = 55.0
+theme_override_font_sizes/font_size = 28
+text = "||"
+
+[node name="ScoreLabel" type="Label" parent="GameScreen/GameHUD" unique_id=903725187]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_top = 66.0
+offset_bottom = 124.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 42
+text = "0"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="HighScoreLabel" type="Label" parent="GameScreen/GameHUD" unique_id=793963699]
+layout_mode = 0
+offset_left = 15.0
+offset_top = 62.0
+offset_right = 140.0
+offset_bottom = 86.0
+theme_override_colors/font_color = Color(1, 0.88, 0.35, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 6
+theme_override_font_sizes/font_size = 14
+text = "BEST: 0"
+vertical_alignment = 1
+
+[node name="LivesContainer" type="HBoxContainer" parent="GameScreen/GameHUD" unique_id=1856854847]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -155.0
+offset_top = 10.0
+offset_right = -15.0
+offset_bottom = 45.0
+grow_horizontal = 0
+grow_vertical = 0
+theme_override_constants/separation = 8
+alignment = 2
+
+[node name="Heart1" type="Panel" parent="GameScreen/GameHUD/LivesContainer" unique_id=1706358437]
+custom_minimum_size = Vector2(26, 26)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Heart2" type="Panel" parent="GameScreen/GameHUD/LivesContainer" unique_id=2047311836]
+custom_minimum_size = Vector2(26, 26)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Heart3" type="Panel" parent="GameScreen/GameHUD/LivesContainer" unique_id=855012667]
+custom_minimum_size = Vector2(26, 26)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Board" type="Control" parent="GameScreen" unique_id=549577870]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -160.0
+offset_top = -160.0
+offset_right = 160.0
+offset_bottom = 160.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Center" type="Panel" parent="GameScreen/Board" unique_id=1327362151]
+custom_minimum_size = Vector2(100, 100)
+layout_mode = 0
+offset_left = 110.0
+offset_top = 220.0
+offset_right = 210.0
+offset_bottom = 320.0
+pivot_offset = Vector2(50, 50)
+mouse_filter = 2
+
+[node name="Up" type="Panel" parent="GameScreen/Board" unique_id=231082499]
+layout_mode = 0
+offset_left = 110.0
+offset_top = 110.0
+offset_right = 210.0
+offset_bottom = 210.0
+mouse_filter = 2
+
+[node name="Down" type="Panel" parent="GameScreen/Board" unique_id=1790447123]
+layout_mode = 0
+offset_left = 110.0
+offset_top = 330.0
+offset_right = 210.0
+offset_bottom = 430.0
+mouse_filter = 2
+
+[node name="Left" type="Panel" parent="GameScreen/Board" unique_id=1408105556]
+layout_mode = 0
+offset_top = 220.0
+offset_right = 100.0
+offset_bottom = 320.0
+mouse_filter = 2
+
+[node name="Right" type="Panel" parent="GameScreen/Board" unique_id=15715158]
+layout_mode = 0
+offset_left = 220.0
+offset_top = 220.0
+offset_right = 320.0
+offset_bottom = 320.0
+mouse_filter = 2
+
+[node name="FloatingTextContainer" type="Control" parent="GameScreen" unique_id=1121074961]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="PauseScreen" type="Control" parent="." unique_id=1574320450]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="PauseBg" type="ColorRect" parent="PauseScreen" unique_id=228873339]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0, 0, 0, 0.6)
+
+[node name="PausePanel" type="Panel" parent="PauseScreen" unique_id=1533615043]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -130.0
+offset_top = -180.0
+offset_right = 130.0
+offset_bottom = 180.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="PauseTitle" type="Label" parent="PauseScreen/PausePanel" unique_id=1520359133]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -100.0
+offset_top = 30.0
+offset_right = 100.0
+offset_bottom = 80.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 36
+text = "PAUSED"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="ResumeBtn" type="Button" parent="PauseScreen/PausePanel" unique_id=1567149235]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -100.0
+offset_top = 100.0
+offset_right = 100.0
+offset_bottom = 155.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 26
+text = "RESUME"
+
+[node name="RestartBtn" type="Button" parent="PauseScreen/PausePanel" unique_id=793013694]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -100.0
+offset_top = 170.0
+offset_right = 100.0
+offset_bottom = 225.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 26
+text = "RESTART"
+
+[node name="MenuBtn" type="Button" parent="PauseScreen/PausePanel" unique_id=1237317219]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -100.0
+offset_top = 240.0
+offset_right = 100.0
+offset_bottom = 295.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 26
+text = "MENU"
+
+[node name="GameOverScreen" type="Control" parent="." unique_id=1448448662]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="GameOverBg" type="ColorRect" parent="GameOverScreen" unique_id=829887666]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0, 0, 0, 0.7)
+
+[node name="GameOverPanel" type="Panel" parent="GameOverScreen" unique_id=1539158611]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -160.0
+offset_top = -300.0
+offset_right = 160.0
+offset_bottom = 300.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="GameOverTitle" type="Label" parent="GameOverScreen/GameOverPanel" unique_id=435617752]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_top = 18.0
+offset_bottom = 72.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(1, 0.278, 0.341, 1)
+theme_override_font_sizes/font_size = 38
+text = "GAME OVER"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="FinalScoreLabel" type="Label" parent="GameOverScreen/GameOverPanel" unique_id=810961122]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_top = 80.0
+offset_bottom = 150.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 52
+text = "0"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="NewRecordBadge" type="Label" parent="GameOverScreen/GameOverPanel" unique_id=590538194]
+visible = false
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -40.0
+offset_top = 65.0
+offset_right = 40.0
+offset_bottom = 90.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(1, 0.765, 0.071, 1)
+theme_override_font_sizes/font_size = 16
+text = "★ NEW! ★"
+horizontal_alignment = 1
+
+[node name="GameOverHighScore" type="Label" parent="GameOverScreen/GameOverPanel" unique_id=491004971]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_top = 150.0
+offset_bottom = 178.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(0.7, 0.65, 0.85, 1)
+theme_override_font_sizes/font_size = 18
+text = "BEST: 0"
+horizontal_alignment = 1
+
+[node name="StatsLabel" type="Label" parent="GameOverScreen/GameOverPanel" unique_id=1612526371]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_top = 188.0
+offset_bottom = 278.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(0.75, 0.7, 0.85, 1)
+theme_override_font_sizes/font_size = 16
+text = "Streak: 0
+Correct: 0
+Accuracy: 0%"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="ReviveBtn" type="Button" parent="GameOverScreen/GameOverPanel" unique_id=987123456]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -135.0
+offset_top = 290.0
+offset_right = 135.0
+offset_bottom = 345.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(1, 0.9, 0.2, 1)
+theme_override_font_sizes/font_size = 15
+text = "WATCH AD (+3 LIVES)"
+
+[node name="RetryBtn" type="Button" parent="GameOverScreen/GameOverPanel" unique_id=1999111322]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -135.0
+offset_top = 358.0
+offset_right = 135.0
+offset_bottom = 410.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 22
+text = "RETRY"
+
+[node name="ShareScoreBtn" type="Button" parent="GameOverScreen/GameOverPanel" unique_id=314159265]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -135.0
+offset_top = 422.0
+offset_right = 135.0
+offset_bottom = 474.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(0.3, 0.9, 1, 1)
+theme_override_font_sizes/font_size = 20
+text = "SHARE SCORE"
+
+[node name="GameOverMenuBtn" type="Button" parent="GameOverScreen/GameOverPanel" unique_id=232187951]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -135.0
+offset_top = 486.0
+offset_right = 135.0
+offset_bottom = 538.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 22
+text = "MENU"
+
+[node name="TutorialScreen" type="Control" parent="." unique_id=641233045]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="TutorialBg" type="ColorRect" parent="TutorialScreen" unique_id=719802797]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0, 0, 0, 0.5)
+
+[node name="TutorialPanel" type="Panel" parent="TutorialScreen" unique_id=65745942]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -225.0
+offset_top = -320.0
+offset_right = 225.0
+offset_bottom = 320.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 1
+
+[node name="TutorialTitle" type="Label" parent="TutorialScreen/TutorialPanel" unique_id=1517280403]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -180.0
+offset_top = 22.0
+offset_right = 180.0
+offset_bottom = 68.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(0.75, 0.95, 1, 1)
+theme_override_colors/font_outline_color = Color(0.05, 0.1, 0.2, 1)
+theme_override_constants/outline_size = 8
+theme_override_font_sizes/font_size = 32
+text = "HOW TO PLAY"
+horizontal_alignment = 1
+
+[node name="TutorialContent" type="Control" parent="TutorialScreen/TutorialPanel" unique_id=1849182736]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = 70.0
+offset_bottom = -75.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="TutorialUnderstoodBtn" type="Button" parent="TutorialScreen/TutorialPanel" unique_id=1176914888]
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -140.0
+offset_top = -65.0
+offset_right = 140.0
+offset_bottom = -15.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_colors/font_color = Color(1, 0.9, 0.2, 1)
+theme_override_font_sizes/font_size = 22
+text = "UNDERSTOOD!"

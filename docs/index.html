@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Music Square - Privacy Policy & Terms of Service</title>
+    <style>
+        :root {
+            --bg-color: #0d0b18;
+            --card-bg: #161226;
+            --accent-cyan: #00e5ff;
+            --accent-pink: #ff2a70;
+            --accent-yellow: #ffd000;
+            --text-main: #e2e8f0;
+            --text-muted: #94a3b8;
+            --border-color: #2e264f;
+        }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            line-height: 1.6;
+            padding: 24px 16px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: var(--card-bg);
+            border-radius: 16px;
+            border: 1px solid var(--border-color);
+            padding: 36px 28px;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+        }
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 20px;
+        }
+        h1 {
+            font-size: 32px;
+            letter-spacing: 2px;
+            color: #ffffff;
+            margin-bottom: 6px;
+            text-shadow: 0 0 16px rgba(0, 229, 255, 0.4);
+        }
+        .subtitle {
+            font-size: 14px;
+            color: var(--accent-cyan);
+            font-weight: 600;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+        .tabs {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 28px;
+            justify-content: center;
+        }
+        .tab-btn {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-muted);
+            border: 1px solid var(--border-color);
+            padding: 10px 22px;
+            border-radius: 30px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .tab-btn.active {
+            background: var(--accent-cyan);
+            color: #0b0f19;
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 14px rgba(0, 229, 255, 0.4);
+        }
+        .content-section {
+            display: none;
+        }
+        .content-section.active {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        h2 {
+            font-size: 20px;
+            color: #ffffff;
+            margin-top: 24px;
+            margin-bottom: 10px;
+            border-left: 3px solid var(--accent-pink);
+            padding-left: 10px;
+        }
+        p, li {
+            font-size: 15px;
+            color: var(--text-main);
+            margin-bottom: 12px;
+        }
+        ul {
+            padding-left: 24px;
+            margin-bottom: 16px;
+        }
+        li {
+            margin-bottom: 6px;
+        }
+        .warning-box {
+            background: rgba(255, 208, 0, 0.08);
+            border: 1px solid var(--accent-yellow);
+            border-radius: 10px;
+            padding: 16px;
+            margin: 20px 0;
+            color: #fff2a8;
+        }
+        .warning-box strong {
+            color: var(--accent-yellow);
+            display: block;
+            margin-bottom: 6px;
+            font-size: 14px;
+        }
+        footer {
+            margin-top: 36px;
+            border-top: 1px solid var(--border-color);
+            padding-top: 20px;
+            text-align: center;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+        a {
+            color: var(--accent-cyan);
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>MUSIC SQUARE</h1>
+            <div class="subtitle">Developer: Psyman &bull; Package: com.psygames.musicsquare</div>
+        </header>
+
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('privacy')">Privacy Policy</button>
+            <button class="tab-btn" onclick="switchTab('terms')">Terms of Service</button>
+        </div>
+
+        <!-- PRIVACY POLICY SECTION -->
+        <div id="privacy-section" class="content-section active">
+            <p><em>Last Updated: September 9, 2026</em></p>
+            <p><strong>Psyman</strong> ("we", "our", or "us") operates the <strong>Music Square</strong> mobile application (the "App"). This page informs you of our policies regarding the collection, use, and disclosure of personal data when you use our App.</p>
+
+            <h2>1. Information Collection and Use</h2>
+            <p>Music Square is an offline rhythm arcade game. We do <strong>not</strong> collect, store, or transmit any personally identifiable information (such as your name, email address, phone number, or precise location) on our servers.</p>
+            <p>All game data, including your high scores, unlocked tracks, badges, and preferences, is stored <strong>locally on your device</strong>.</p>
+
+            <h2>2. Advertising & Third-Party Services (Google AdMob)</h2>
+            <p>The App integrates <strong>Google AdMob</strong> to display optional rewarded ads (such as continuing a run or earning bonus charges). AdMob may automatically collect and process device metrics in accordance with Google's Privacy Policy, including:</p>
+            <ul>
+                <li><strong>Device Identifiers:</strong> Advertising ID (GAID), device manufacturer, model, and OS version.</li>
+                <li><strong>Network & Diagnostics:</strong> IP address, network state, carrier, and general location (country/city).</li>
+                <li><strong>Ad Performance:</strong> Impressions, clicks, and diagnostic logs.</li>
+            </ul>
+            <p>For more details, please visit <a href="https://policies.google.com/technologies/ads" target="_blank" rel="noopener">Google Privacy & Terms</a>.</p>
+
+            <h2>3. Permissions Requested</h2>
+            <ul>
+                <li><strong>INTERNET & ACCESS_NETWORK_STATE:</strong> Used strictly by the AdMob SDK to load and display ads.</li>
+                <li><strong>VIBRATE:</strong> Used to provide responsive haptic vibration feedback during gameplay (can be toggled in Options).</li>
+            </ul>
+
+            <h2>4. Children's Privacy</h2>
+            <p>Music Square does not knowingly collect or solicit personal information from children under the age of 13. The App is a general-audience music arcade game.</p>
+
+            <h2>5. Data Retention & Deletion</h2>
+            <p>Because no personal data is collected or retained on remote servers by Psyman, you can completely erase all local game data at any time by tapping <strong>RESET GAME DATA</strong> in the Options menu or clearing App Storage in your Android settings.</p>
+        </div>
+
+        <!-- TERMS OF SERVICE SECTION -->
+        <div id="terms-section" class="content-section">
+            <p><em>Last Updated: September 9, 2026</em></p>
+            <p>Welcome to <strong>Music Square</strong>! These Terms of Service ("Terms") govern your use of the Music Square mobile game, developed and published by <strong>Psyman</strong> ("Developer").</p>
+
+            <h2>1. License Grant</h2>
+            <p>Subject to these Terms, Psyman grants you a personal, revocable, non-exclusive, non-transferable license to download, install, and play Music Square on your personal Android device for personal, non-commercial entertainment.</p>
+
+            <h2>2. Intellectual Property & Music Credits</h2>
+            <p>All game code, mechanics, artwork, and visual effects are the intellectual property of Psyman. Music tracks featured in Music Square (including compositions by <strong>Komiku</strong> and featured indie musicians) are licensed under Creative Commons (CC0 / CC-BY) or public domain and remain the intellectual property of their respective creators.</p>
+
+            <h2>3. Virtual Scores & Game Data</h2>
+            <p>High scores, unlocked songs, board themes, power-ups, and badges are virtual gameplay elements with no real-world monetary value. All progress is saved locally on your device; Psyman is not liable for data loss caused by clearing app cache or uninstalling.</p>
+
+            <h2>4. Third-Party Services (Google AdMob)</h2>
+            <p>The App features optional rewarded ads provided by Google AdMob. Ad availability is managed by Google LLC, and interactions with third-party advertisers are subject to their respective terms.</p>
+
+            <div class="warning-box">
+                <strong>PHOTOSENSITIVITY & EPILEPSY WARNING</strong>
+                Music Square contains flashing lights, rapid color transitions, and pulsing visual effects that may trigger discomfort or seizures in individuals with photosensitive epilepsy. If you experience dizziness, altered vision, or muscle twitches, immediately discontinue playing.
+            </div>
+
+            <h2>5. Disclaimer of Warranties & Limitation of Liability</h2>
+            <p>Music Square is provided "AS IS" and "AS AVAILABLE" without warranties of any kind. To the fullest extent permitted by law, Psyman shall not be liable for any indirect, incidental, or consequential damages arising from the use of the App.</p>
+        </div>
+
+        <footer>
+            &copy; 2026 Psyman &bull; Music Square &bull; All Rights Reserved.
+        </footer>
+    </div>
+
+    <script>
+        function switchTab(tabName) {
+            const tabs = document.querySelectorAll('.tab-btn');
+            const sections = document.querySelectorAll('.content-section');
+            
+            tabs.forEach(btn => btn.classList.remove('active'));
+            sections.forEach(sec => sec.classList.remove('active'));
+
+            if (tabName === 'privacy') {
+                tabs[0].classList.add('active');
+                document.getElementById('privacy-section').classList.add('active');
+            } else {
+                tabs[1].classList.add('active');
+                document.getElementById('terms-section').classList.add('active');
+            }
+        }
+    </script>
+</body>
+</html>
