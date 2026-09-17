@@ -349,6 +349,11 @@ func _apply_board_styles() -> void:
 	center_square.add_theme_stylebox_override("panel", _center_panel_style)
 	center_square.pivot_offset = Vector2(50, 50)
 
+	for dir: String in direction_squares:
+		var p: Panel = direction_squares[dir]
+		if p != null and is_instance_valid(p):
+			p.pivot_offset = p.size / 2.0
+
 	# Center pivot for the board container so remap pop animates from its center
 	var board: Control = $GameScreen/Board
 	board.pivot_offset = board.size / 2.0
@@ -3783,48 +3788,136 @@ func _roll_remap_interval() -> int:
 
 
 func _remap_directions() -> void:
-	var colors: Array = direction_colors.values()
-	var original := colors.duplicate()
+	var keys: Array = ["up", "down", "left", "right"]
+	var original_colors: Array = []
+	for k: String in keys:
+		original_colors.append(direction_colors[k])
 
-	var attempts := 0
-	while attempts < 10:
-		colors.shuffle()
-		if colors != original:
-			break
+	# Generate a strict derangement (0 fixed points: every single square gets a new color)
+	var new_colors: Array = original_colors.duplicate()
+	var found_derangement: bool = false
+	var attempts: int = 0
+
+	while not found_derangement and attempts < 40:
+		new_colors.shuffle()
+		found_derangement = true
+		for i in range(keys.size()):
+			if new_colors[i].is_equal_approx(original_colors[i]):
+				found_derangement = false
+				break
 		attempts += 1
 
-	var keys: Array = direction_colors.keys()
+	# Mathematical guarantee: if random shuffle didn't produce a derangement,
+	# cyclic shift by random offset in [1, 2, 3] guarantees 100% true derangement.
+	if not found_derangement:
+		var shift: int = randi_range(1, keys.size() - 1)
+		new_colors.clear()
+		for i in range(keys.size()):
+			new_colors.append(original_colors[(i + shift) % keys.size()])
+
 	for i in range(keys.size()):
-		direction_colors[keys[i]] = colors[i]
+		direction_colors[keys[i]] = new_colors[i]
 
 	_remaps_survived_this_game += 1
 	_check_in_game_achievements()
 
 	sfx.play("remap")
 	_haptic_shuffle()
-	_flash_remap_squares()
+	_animate_remap_squares()
 	_show_remap_banner("SHUFFLED!")
 
 
-func _flash_remap_squares() -> void:
-	# Instant white flash on all four squares...
+func _animate_remap_squares() -> void:
+	# Ensure pivots are centered on all squares
 	for dir: String in direction_squares:
 		var panel: Panel = direction_squares[dir]
+		if panel != null and is_instance_valid(panel):
+			panel.pivot_offset = panel.size / 2.0
+
+	var board: Control = $GameScreen/Board
+	if board != null and is_instance_valid(board):
+		board.pivot_offset = board.size / 2.0
+		var board_tilt: float = 9.0 if randf() > 0.5 else -9.0
+		var b_tween := create_tween()
+		# Punch out with tilt
+		b_tween.set_parallel(true)
+		b_tween.set_trans(Tween.TRANS_BACK)
+		b_tween.set_ease(Tween.EASE_OUT)
+		b_tween.tween_property(board, "scale", Vector2(1.10, 1.10), 0.14)
+		b_tween.tween_property(board, "rotation_degrees", board_tilt, 0.14)
+		# Spring back
+		b_tween.chain().set_parallel(true)
+		b_tween.set_trans(Tween.TRANS_BACK)
+		b_tween.set_ease(Tween.EASE_OUT)
+		b_tween.tween_property(board, "scale", Vector2.ONE, 0.22)
+		b_tween.tween_property(board, "rotation_degrees", 0.0, 0.22)
+
+	# 2. Individual Squares 3D Card Flip & Rotating Spin Animation
+	var spin_dirs := {
+		"up": 360.0,
+		"down": -360.0,
+		"left": -360.0,
+		"right": 360.0
+	}
+
+	for dir: String in direction_squares:
+		var panel: Panel = direction_squares[dir]
+		if panel == null or not is_instance_valid(panel):
+			continue
+
+		# Clean reset of transforms
+		panel.rotation_degrees = 0.0
+		panel.scale = Vector2.ONE
+
+		# Bright neon flash style with ambient bloom
 		var flash_style := _panel_style.duplicate()
-		flash_style.bg_color = Color(1, 1, 1, 0.9)
+		flash_style.bg_color = Color(1.35, 1.35, 1.35, 0.95)
+		flash_style.set_border_width_all(3)
+		flash_style.set_border_color(Color(2.0, 2.0, 2.0, 1.0))
+		flash_style.set_shadow_color(Color(0.2, 0.9, 1.0, 0.8))
+		flash_style.set_shadow_size(18)
 		panel.add_theme_stylebox_override("panel", flash_style)
 
-	# ...then reveal the newly shuffled colors a beat later
-	var tween := create_tween()
-	tween.tween_callback(_apply_board_colors).set_delay(0.15)
+		var target_spin: float = spin_dirs.get(dir, 360.0)
+		var half_spin: float = target_spin * 0.5
 
-	# Bounce the whole board for extra emphasis
-	var board: Control = $GameScreen/Board
-	var board_tween := create_tween()
-	board_tween.set_trans(Tween.TRANS_BACK)
-	board_tween.set_ease(Tween.EASE_OUT)
-	board_tween.tween_property(board, "scale", Vector2(1.1, 1.1), 0.12)
-	board_tween.tween_property(board, "scale", Vector2.ONE, 0.18)
+		var sq_tween := create_tween()
+		# Phase 1: Spin 180° + squeeze to edge-on (0.13s)
+		sq_tween.set_parallel(true)
+		sq_tween.set_trans(Tween.TRANS_QUAD)
+		sq_tween.set_ease(Tween.EASE_IN)
+		sq_tween.tween_property(panel, "rotation_degrees", half_spin, 0.13)
+		sq_tween.tween_property(panel, "scale", Vector2(0.08, 1.15), 0.13)
+
+		# Phase 2: At midpoint (edge-on), reveal new colors and emit spark flare
+		sq_tween.chain().tween_callback(func():
+			if is_instance_valid(panel):
+				_apply_board_colors()
+				_burst_particles(panel.global_position + panel.size / 2.0, direction_colors.get(dir, Color.WHITE), 5)
+		)
+
+		# Phase 3: Spin to 360° and snap back open with elastic punch (0.20s)
+		sq_tween.chain().set_parallel(true)
+		sq_tween.set_trans(Tween.TRANS_BACK)
+		sq_tween.set_ease(Tween.EASE_OUT)
+		sq_tween.tween_property(panel, "rotation_degrees", target_spin, 0.20)
+		sq_tween.tween_property(panel, "scale", Vector2.ONE, 0.20)
+
+		# Phase 4: Clean reset of angle
+		sq_tween.chain().tween_callback(func():
+			if is_instance_valid(panel):
+				panel.rotation_degrees = 0.0
+				panel.scale = Vector2.ONE
+		)
+
+	# 3. Center target square dynamic pulse
+	if center_square != null and is_instance_valid(center_square):
+		center_square.pivot_offset = center_square.size / 2.0
+		var c_tween := create_tween()
+		c_tween.set_trans(Tween.TRANS_BACK)
+		c_tween.set_ease(Tween.EASE_OUT)
+		c_tween.tween_property(center_square, "scale", Vector2(1.22, 1.22), 0.13)
+		c_tween.tween_property(center_square, "scale", Vector2.ONE, 0.20)
 
 
 func _show_remap_banner(text: String) -> void:
