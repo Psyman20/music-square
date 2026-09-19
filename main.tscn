@@ -118,7 +118,7 @@ grow_horizontal = 2
 grow_vertical = 0
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_font_sizes/font_size = 14
-text = "v1.0.0"
+text = "v1.0.2"
 horizontal_alignment = 1
 
 [node name="GameScreen" type="Control" parent="." unique_id=1067650203]
