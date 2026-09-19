@@ -3910,6 +3910,15 @@ func _process(delta: float) -> void:
 			_on_turn_timeout()
 
 
+func _calculate_turn_time_limit(is_hold: bool = false) -> float:
+	# Scales turn difficulty by decreasing time limit by 0.1s for every 500,000 points.
+	# Minimum reaction floors prevent impossible or negative timers in ultra late-game.
+	var reduction: float = float(score / 500000) * 0.1
+	if is_hold:
+		return maxf(1.5, 2.4 - reduction)
+	return maxf(0.6, GameSettings.INITIAL_TIME_LIMIT - reduction)
+
+
 func start_new_turn() -> void:
 	if state != settings.GameState.PLAYING:
 		return
@@ -3935,8 +3944,8 @@ func start_new_turn() -> void:
 	is_holding_active = false
 	hold_duration = 0.0
 
-	# 2. Constant time limit
-	current_time_limit = settings.INITIAL_TIME_LIMIT
+	# 2. Dynamic time limit based on score (decreases by 0.1s every 500,000 points)
+	current_time_limit = _calculate_turn_time_limit(false)
 	time_left_in_turn = current_time_limit
 	_turn_start_time = Time.get_ticks_msec() / 1000.0
 
@@ -3973,7 +3982,7 @@ func start_new_turn() -> void:
 		# Roll 3: Hold Turn (5% chance: roll between 0.07 and 0.12)
 		elif roll < 0.12:
 			is_hold_turn = true
-			current_time_limit = 2.4
+			current_time_limit = _calculate_turn_time_limit(true)
 			time_left_in_turn = current_time_limit
 			_setup_hold_turn_indicator()
 
