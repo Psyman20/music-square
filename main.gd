@@ -163,6 +163,16 @@ var _reset_game_btn: Button
 var _reset_confirm_modal: Control
 var _tutorial_return_state: GameSettings.GameState = GameSettings.GameState.PLAYING
 
+# --- Dynamic Interactive Walkthrough State ---
+const WalkthroughOverlayScript = preload("res://walkthrough_overlay.gd")
+var _is_walkthrough_active: bool = false
+var _walkthrough_step: int = 0
+var _walkthrough_overlay: Control = null
+var _walkthrough_frenzy_swipes_done: int = 0
+var _walkthrough_advancing: bool = false
+var _walkthrough_from_options: bool = false
+var _center_squash_tween: Tween = null
+
 # --- Overlay panel drag-scroll state ---
 var _overlay_drag_active: bool = false
 var _overlay_drag_start_y: float = 0.0
@@ -794,6 +804,9 @@ func _set_state(new_state: GameSettings.GameState) -> void:
 	pause_screen.visible = (state == GameSettings.GameState.PAUSED)
 	game_over_screen.visible = (state == GameSettings.GameState.GAME_OVER)
 	tutorial_screen.visible = (state == GameSettings.GameState.TUTORIAL)
+
+	if _walkthrough_overlay != null and is_instance_valid(_walkthrough_overlay):
+		_walkthrough_overlay.visible = (state == GameSettings.GameState.PLAYING and _is_walkthrough_active)
 
 	if state == GameSettings.GameState.PAUSED or state == GameSettings.GameState.GAME_OVER or state == GameSettings.GameState.MENU:
 		_clear_persistent_labels()
@@ -1579,9 +1592,8 @@ func _setup_options_ui() -> void:
 	how_to_btn.add_theme_stylebox_override("pressed", h_hover)
 	how_to_btn.pressed.connect(func():
 		_close_options_screen()
-		_tutorial_return_state = GameSettings.GameState.MENU
-		_setup_tutorial_ui()
-		_set_state(settings.GameState.TUTORIAL)
+		_walkthrough_from_options = true
+		_start_dynamic_walkthrough()
 	)
 	panel.add_child(how_to_btn)
 	_options_non_zone_controls.append(how_to_btn)
@@ -2345,6 +2357,319 @@ func _on_tutorial_scroll_input(event: InputEvent, scroll: ScrollContainer) -> vo
 				var delta: float = _tutorial_drag_start_y - event.position.y
 				scroll.scroll_vertical = _tutorial_drag_scroll_start + int(delta)
 				get_viewport().set_input_as_handled()
+
+
+# =====================================================
+# DYNAMIC INTERACTIVE WALKTHROUGH CONTROLLER
+# =====================================================
+
+func _start_game_with_walkthrough() -> void:
+	_setup_initial_game_state()
+	_set_state(settings.GameState.PLAYING)
+	_update_high_score_display()
+	_start_dynamic_walkthrough()
+
+
+func _start_dynamic_walkthrough() -> void:
+	_setup_initial_game_state()
+	_set_state(settings.GameState.PLAYING)
+	_is_walkthrough_active = true
+	_walkthrough_advancing = false
+	_walkthrough_frenzy_swipes_done = 0
+	hold_exit_buffer = 0.0
+	frenzy_exit_buffer = 0.0
+
+	# Instantiate overlay if needed
+	if _walkthrough_overlay == null or not is_instance_valid(_walkthrough_overlay):
+		_walkthrough_overlay = WalkthroughOverlayScript.new()
+		_walkthrough_overlay.name = "WalkthroughOverlay"
+		game_screen.add_child(_walkthrough_overlay)
+		_walkthrough_overlay.setup(center_square, direction_squares, _make_arcade_font(0.5))
+		_walkthrough_overlay.skip_pressed.connect(_on_walkthrough_skip)
+		_walkthrough_overlay.start_play_pressed.connect(_on_walkthrough_play_pressed)
+
+	_walkthrough_overlay.visible = true
+	_setup_walkthrough_step(1)
+
+
+func _setup_walkthrough_step(step: int) -> void:
+	_walkthrough_step = step
+	_walkthrough_advancing = false
+
+	# Clean reset between steps
+	_cleanup_hold_ui()
+	is_holding_active = false
+	is_hold_turn = false
+	powerup_square_dir = ""
+	powerup_type = ""
+	_clear_persistent_labels()
+	time_left_in_turn = current_time_limit
+	if _center_squash_tween != null and _center_squash_tween.is_valid():
+		_center_squash_tween.kill()
+		_center_squash_tween = null
+	_center_scale_locked = false
+	if center_square != null and is_instance_valid(center_square):
+		center_square.scale = Vector2.ONE
+	hold_exit_buffer = 0.0
+	frenzy_exit_buffer = 0.0
+
+	match step:
+		1:
+			# Step 1: Color Matching
+			current_target_direction = "right"
+			var col: Color = direction_colors.get("right", Color(0.12, 0.46, 0.88))
+			var style := _center_panel_style.duplicate()
+			style.bg_color = col
+			center_square.add_theme_stylebox_override("panel", style)
+			center_square.queue_redraw()
+			_apply_board_colors()
+			_pulse_center()
+			_walkthrough_overlay.set_step(1, "right", "[ STEP 1 OF 6 • COLOR MATCH ]", "Look at the center square color.\nSwipe toward the MATCHING outer square!", false, false)
+
+		2:
+			# Step 2: Combos & Multiplier
+			current_target_direction = "up"
+			var col: Color = direction_colors.get("up", Color(0.88, 0.22, 0.35))
+			var style := _center_panel_style.duplicate()
+			style.bg_color = col
+			center_square.add_theme_stylebox_override("panel", style)
+			center_square.queue_redraw()
+			_apply_board_colors()
+			_pulse_center()
+			_walkthrough_overlay.set_step(2, "up", "[ STEP 2 OF 6 • STREAKS & MULTIPLIER ]", "Chain correct swipes without missing!\nEvery 5 swipes increases your MULTIPLIER up to 4x!", false, false)
+
+		3:
+			# Step 3: Hold Squares
+			current_target_direction = "down"
+			var col: Color = direction_colors.get("down", Color(0.82, 0.72, 0.06))
+			var style := _center_panel_style.duplicate()
+			style.bg_color = col
+			center_square.add_theme_stylebox_override("panel", style)
+			center_square.queue_redraw()
+			is_hold_turn = true
+			_setup_hold_turn_indicator()
+			_apply_board_colors()
+			_pulse_center()
+			_walkthrough_overlay.set_step(3, "down", "[ STEP 3 OF 6 • HOLD SQUARES ]", "When you see pulsing brackets:\nSWIPE and HOLD your finger until the charge ring fills!", true, false)
+
+		4:
+			# Step 4: Frenzy Power-Up
+			if is_frenzy_active:
+				_end_frenzy_mode()
+			current_target_direction = "up"
+			var col: Color = direction_colors.get("up", Color(0.88, 0.22, 0.35))
+			var style := _center_panel_style.duplicate()
+			style.bg_color = col
+			center_square.add_theme_stylebox_override("panel", style)
+			center_square.queue_redraw()
+			powerup_square_dir = "left"
+			powerup_type = "frenzy"
+			_apply_board_colors()
+			_pulse_center()
+			_walkthrough_overlay.set_step(4, "left", "[ STEP 4 OF 6 • FRENZY POWER-UP ]", "Swipe into the ⚡ LIGHTNING square!\nFrenzy unleashes rapid-fire scoring across all squares!", false, false)
+
+		5:
+			# Step 5: Time Booster (+5s)
+			if is_frenzy_active:
+				_end_frenzy_mode()
+			current_target_direction = "left"
+			var col: Color = direction_colors.get("left", Color(0.10, 0.70, 0.38))
+			var style := _center_panel_style.duplicate()
+			style.bg_color = col
+			center_square.add_theme_stylebox_override("panel", style)
+			center_square.queue_redraw()
+			powerup_square_dir = "right"
+			powerup_type = "frenzy_boost"
+			_apply_board_colors()
+			_pulse_center()
+			_walkthrough_overlay.set_step(5, "right", "[ STEP 5 OF 6 • TIME BOOSTER ]", "Swipe the ⏱ BOOSTER to store +5s extra time!\nBooster charges make your future Frenzy runs last longer!", false, false)
+
+		6:
+			# Step 6: Board Shuffle (Whirlwind 360° spin)
+			_remap_directions()
+			current_target_direction = "up"
+			var col: Color = direction_colors.get("up", Color(0.88, 0.22, 0.35))
+			var style := _center_panel_style.duplicate()
+			style.bg_color = col
+			center_square.add_theme_stylebox_override("panel", style)
+			center_square.queue_redraw()
+			_pulse_center()
+			_walkthrough_overlay.set_step(6, "up", "[ STEP 6 OF 6 • BOARD SHUFFLE ]", "The board spins and colors swap periodically!\nRe-orient and swipe the new matching position!", false, false)
+
+		7:
+			# Step 7: Ready to Play / Completed Briefing
+			if is_frenzy_active:
+				_end_frenzy_mode()
+			_apply_board_colors()
+			if _walkthrough_from_options:
+				_walkthrough_overlay.show_final_step("TUTORIAL COMPLETE! 🎯", "You've mastered all mechanics of Music Square!\nTap below or anywhere on screen to return to Options.", "BACK TO OPTIONS ↩")
+			else:
+				_walkthrough_overlay.show_final_step("YOU'RE READY TO PLAY! 🎮", "3 Hearts: Wrong swipes or timing out loses a heart.\nMultipliers & Speed increase as you score higher!", "LET'S PLAY! 🚀")
+
+
+func _handle_walkthrough_swipe(direction: String) -> void:
+	if _walkthrough_advancing:
+		return
+
+	match _walkthrough_step:
+		1: # Step 1: Color Match
+			if direction == current_target_direction:
+				_walkthrough_advancing = true
+				sfx.play("correct")
+				_haptic_tap()
+				_burst_particles(_get_board_center(direction), direction_colors.get(direction, Color.WHITE), 12)
+				_flash_square(direction, Color.WHITE)
+				_walkthrough_overlay.flash_success("PERFECT! ⭐")
+				_advance_walkthrough()
+			else:
+				sfx.play("wrong")
+				_haptic_wrong()
+				_flash_center_red()
+				_shake_screen(3.0)
+				_walkthrough_overlay.flash_reminder("Swipe toward the matching square 👉")
+
+		2: # Step 2: Streak & Multiplier
+			if direction == current_target_direction:
+				_walkthrough_advancing = true
+				sfx.play("combo")
+				_haptic_tap()
+				streak = 5
+				_update_combo_hud()
+				_update_streak_visuals()
+				_burst_particles(_get_board_center(direction), direction_colors.get(direction, Color.WHITE), 14)
+				_flash_square(direction, Color(1.5, 0.35, 0.85, 1.0))
+				_walkthrough_overlay.flash_success("x2 MULTIPLIER! 🔥")
+				_advance_walkthrough()
+			else:
+				sfx.play("wrong")
+				_flash_center_red()
+				_walkthrough_overlay.flash_reminder("Swipe UP to boost your multiplier!")
+
+		3: # Step 3: Hold Turn
+			if direction == current_target_direction:
+				_walkthrough_overlay.flash_reminder("HOLD your finger down until the ring fills!")
+			else:
+				_walkthrough_overlay.flash_reminder("Swipe DOWN and HOLD!")
+
+		4: # Step 4: Frenzy Power-Up
+			if not is_frenzy_active:
+				if direction == "left":
+					sfx.play("combo")
+					_burst_particles(_get_board_center("left"), Color(1.8, 1.4, 0.2), 16)
+					_activate_frenzy_mode()
+					_walkthrough_frenzy_swipes_done = 0
+					_walkthrough_overlay.set_step(4, "", "[ STEP 4 OF 6 • FRENZY ACTIVE! ⚡ ]", "Frenzy unlocked! Swipe ANY direction for massive points!\nSwipe any square now!", false, true)
+					_walkthrough_overlay.flash_success("FRENZY UNLEASHED! ⚡")
+				else:
+					_walkthrough_overlay.flash_reminder("Swipe toward the ⚡ lightning square!")
+			else:
+				# Practice rapid frenzy swipe: 1 practice swipe is plenty!
+				_walkthrough_advancing = true
+				_walkthrough_frenzy_swipes_done += 1
+				sfx.play("combo")
+				_burst_particles(_get_board_center(direction), Color(1.8, 1.4, 0.2), 16)
+				_flash_square(direction, Color.WHITE)
+				_walkthrough_overlay.flash_success("FRENZY MASTERED! ⚡")
+				_end_frenzy_mode()
+				frenzy_exit_buffer = 0.0
+				_advance_walkthrough()
+
+		5: # Step 5: Time Booster (+5s)
+			if direction == "right":
+				_walkthrough_advancing = true
+				_add_frenzy_charge()
+				sfx.play("combo")
+				_burst_particles(_get_board_center("right"), Color(0.2, 0.95, 1.0), 14)
+				_flash_square("right", Color(0.2, 0.95, 1.0, 0.9))
+				_walkthrough_overlay.flash_success("+5s CHARGE STORED! ⏱")
+				_advance_walkthrough()
+			else:
+				_walkthrough_overlay.flash_reminder("Swipe toward the ⏱ booster square!")
+
+		6: # Step 6: Board Shuffle
+			if direction == current_target_direction:
+				_walkthrough_advancing = true
+				sfx.play("unlock")
+				_burst_particles(_get_board_center(direction), direction_colors.get(direction, Color.WHITE), 16)
+				_flash_square(direction, Color.WHITE)
+				_walkthrough_overlay.flash_success("SHUFFLE MASTER! 🎯")
+				_advance_walkthrough()
+			else:
+				_walkthrough_overlay.flash_reminder("Look at the center color on the new layout!")
+
+		7: # Step 7: Ready to Play Briefing
+			_walkthrough_advancing = true
+			_finish_walkthrough(false)
+
+
+func _advance_walkthrough() -> void:
+	var tw := create_tween()
+	tw.tween_interval(0.45)
+	tw.tween_callback(func():
+		if _is_walkthrough_active:
+			_setup_walkthrough_step(_walkthrough_step + 1)
+	)
+
+
+func _finish_walkthrough(skipped: bool = false) -> void:
+	_is_walkthrough_active = false
+	_walkthrough_advancing = false
+	_walkthrough_step = 0
+	settings.first_play = false
+	settings.save_data()
+
+	if is_frenzy_active:
+		_end_frenzy_mode()
+
+	if _walkthrough_overlay != null and is_instance_valid(_walkthrough_overlay):
+		_walkthrough_overlay.visible = false
+		_walkthrough_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	if _center_squash_tween != null and _center_squash_tween.is_valid():
+		_center_squash_tween.kill()
+		_center_squash_tween = null
+	_center_scale_locked = false
+	if center_square != null and is_instance_valid(center_square):
+		center_square.scale = Vector2.ONE
+
+	# If launched from Options, revert directly to Options menu!
+	if _walkthrough_from_options:
+		_walkthrough_from_options = false
+		_set_state(settings.GameState.MENU)
+		_open_options_screen()
+		return
+
+	# Reset cleanly so practice swipes don't taint real game stats
+	_setup_initial_game_state()
+	_update_high_score_display()
+	update_score_display()
+	_update_lives_display()
+	_update_combo_hud()
+	_update_frenzy_charge_ui()
+
+	if not skipped:
+		sfx.play("unlock")
+		_show_remap_banner("READY... GO!")
+		var tw := create_tween()
+		tw.tween_interval(0.65)
+		tw.tween_callback(func():
+			if state == settings.GameState.PLAYING:
+				start_new_turn()
+		)
+	else:
+		start_new_turn()
+
+
+func _on_walkthrough_skip() -> void:
+	sfx.play("tap")
+	_haptic_tap()
+	_finish_walkthrough(true)
+
+
+func _on_walkthrough_play_pressed() -> void:
+	sfx.play("tap")
+	_haptic_celebration()
+	_finish_walkthrough(false)
 
 
 # =====================================================
@@ -3138,9 +3463,8 @@ func _start_game() -> void:
 	_update_high_score_display()
 
 	if settings.first_play:
-		settings.first_play = false
-		settings.save_data()
-		_set_state(settings.GameState.TUTORIAL)
+		_walkthrough_from_options = false
+		_start_dynamic_walkthrough()
 	else:
 		start_new_turn()
 
@@ -3524,6 +3848,20 @@ func _process(delta: float) -> void:
 			_finish_hold_mode()
 		return
 
+	if _is_walkthrough_active:
+		time_left_in_turn = current_time_limit
+		hold_exit_buffer = 0.0
+		frenzy_exit_buffer = 0.0
+		if is_frenzy_active:
+			frenzy_time_left = 15.0
+			frenzy_switch_timer += delta
+			if frenzy_switch_timer >= 1.0:
+				frenzy_switch_timer -= 1.0
+				_pick_new_frenzy_special_square()
+			if _frenzy_hud_label != null and is_instance_valid(_frenzy_hud_label):
+				_frenzy_hud_label.text = "⚡ FRENZY ACTIVE! SWIPE ANY DIRECTION! ⚡"
+		return
+
 	if is_frenzy_active:
 		frenzy_time_left -= delta
 		frenzy_switch_timer += delta
@@ -3746,6 +4084,10 @@ func _end_frenzy_mode() -> void:
 		_frenzy_hud_label = null
 
 	if was_active:
+		if _is_walkthrough_active:
+			frenzy_exit_buffer = 0.0
+			_apply_board_colors()
+			return
 		frenzy_exit_buffer = 0.6
 		_show_remap_banner("FRENZY OVER")
 		start_new_turn()
@@ -4089,6 +4431,39 @@ func _finish_hold_mode() -> void:
 	if not is_holding_active and not is_hold_turn:
 		return
 
+	if _is_walkthrough_active and _walkthrough_step == 3:
+		var final_dur := clampf(hold_duration, 0.0, MAX_HOLD_DURATION)
+		is_holding_active = false
+		hold_duration = 0.0
+		_center_scale_locked = false
+		is_swiping = false
+		active_touch_index = -1
+		hold_exit_buffer = 0.0
+		if center_square != null and is_instance_valid(center_square):
+			center_square.scale = Vector2.ONE
+			center_square.queue_redraw()
+		if direction_squares.has("down") and is_instance_valid(direction_squares["down"]):
+			direction_squares["down"].queue_redraw()
+		_cleanup_hold_ui()
+
+		if final_dur >= 1.0:
+			is_hold_turn = false
+			_walkthrough_advancing = true
+			sfx.play("unlock")
+			_haptic_celebration()
+			_burst_particles(_get_board_center("down"), Color(1.0, 0.9, 0.2), 16)
+			_flash_square("down", Color(1.0, 0.9, 0.2, 0.9))
+			_walkthrough_overlay.flash_success("MAX CHARGE! ⚡")
+			_advance_walkthrough()
+		else:
+			# Released too early: keep hold turn active so player can retry immediately
+			is_hold_turn = true
+			sfx.play("wrong")
+			_haptic_wrong()
+			_setup_hold_turn_indicator()
+			_walkthrough_overlay.flash_reminder("Don't release yet! Hold until the ring fills! ⚡")
+		return
+
 	var final_dur := clampf(hold_duration, 0.25, MAX_HOLD_DURATION)
 	is_holding_active = false
 	is_hold_turn = false
@@ -4278,6 +4653,14 @@ func _input(event: InputEvent) -> void:
 
 
 func _handle_game_input(event: InputEvent) -> void:
+	if _is_walkthrough_active:
+		hold_exit_buffer = 0.0
+		frenzy_exit_buffer = 0.0
+		if _walkthrough_step == 7:
+			if (event is InputEventScreenTouch and event.pressed) or (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
+				_finish_walkthrough(false)
+				return
+
 	# 0. Block input during post-hold grace cooldown to prevent accidental swipes
 	if hold_exit_buffer > 0.0:
 		if event is InputEventMouseButton and not event.pressed:
@@ -4411,6 +4794,11 @@ func _calculate_swipe(end_position: Vector2) -> void:
 
 func _on_swipe(direction: String) -> void:
 	if state != settings.GameState.PLAYING:
+		return
+
+	if _is_walkthrough_active:
+		_squash_stretch_center(direction)
+		_handle_walkthrough_swipe(direction)
 		return
 
 	# Ignore swipes during post-frenzy or post-hold grace buffer
@@ -4585,6 +4973,18 @@ func _on_correct_swipe(swiped_dir: String = "", is_powerup: bool = false, poweru
 
 
 func _on_wrong_swipe(_wrong_dir: String) -> void:
+	if _is_walkthrough_active:
+		sfx.play("wrong")
+		_haptic_wrong()
+		_flash_center_red()
+		_shake_screen(3.0)
+		if _walkthrough_overlay != null:
+			if _walkthrough_step == 3:
+				_walkthrough_overlay.flash_reminder("Swipe DOWN and HOLD! ⚡")
+			else:
+				_walkthrough_overlay.flash_reminder("Swipe toward the matching color 👉")
+		return
+
 	_cleanup_hold_ui()
 	is_holding_active = false
 	is_hold_turn = false
@@ -4933,12 +5333,29 @@ func _pulse_center() -> void:
 
 
 func _squash_stretch_center(direction: String) -> void:
+	if center_square == null or not is_instance_valid(center_square):
+		return
+	if _center_squash_tween != null and _center_squash_tween.is_valid():
+		_center_squash_tween.kill()
+
 	_center_scale_locked = true
+	var target_scale := Vector2.ONE
 	match direction:
 		"up", "down":
-			center_square.scale = Vector2(0.72, 1.35)
+			target_scale = Vector2(0.75, 1.30)
 		"left", "right":
-			center_square.scale = Vector2(1.35, 0.72)
+			target_scale = Vector2(1.30, 0.75)
+
+	center_square.scale = target_scale
+	_center_squash_tween = create_tween()
+	_center_squash_tween.set_trans(Tween.TRANS_QUAD)
+	_center_squash_tween.set_ease(Tween.EASE_OUT)
+	_center_squash_tween.tween_property(center_square, "scale", Vector2.ONE, 0.16)
+	_center_squash_tween.tween_callback(func():
+		_center_scale_locked = false
+		if center_square != null and is_instance_valid(center_square):
+			center_square.scale = Vector2.ONE
+	)
 
 
 func _pulse_label(label: Control, from_s: float, to_s: float, dur: float) -> void:
@@ -5458,6 +5875,12 @@ func _make_arcade_font(embolden: float) -> FontVariation:
 	fv.base_font = _base_font
 	fv.variation_embolden = embolden
 	fv.spacing_glyph = 6  # wide arcade marquee tracking
+
+	# Add system emoji/fallback fonts so emojis and symbols render on all mobile phones (Android/iOS)
+	var sys_font := SystemFont.new()
+	sys_font.font_names = PackedStringArray(["Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", "Roboto", "sans-serif"])
+	fv.fallbacks.append(sys_font)
+
 	_arcade_font_cache[embolden] = fv
 	return fv
 
