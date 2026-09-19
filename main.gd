@@ -356,7 +356,7 @@ func _apply_board_styles() -> void:
 
 	# Center pivot for the board container so remap pop animates from its center
 	var board: Control = $GameScreen/Board
-	board.pivot_offset = board.size / 2.0
+	board.pivot_offset = center_square.position + center_square.size / 2.0
 
 
 func _get_hud_mid_zone_y() -> float:
@@ -3828,96 +3828,80 @@ func _remap_directions() -> void:
 
 
 func _animate_remap_squares() -> void:
-	# Ensure pivots are centered on all squares
+	var board: Control = $GameScreen/Board
+	if board == null or not is_instance_valid(board):
+		_apply_board_colors()
+		return
+
+	# Reset all individual squares so they stay flat and intact (no individual spinning)
 	for dir: String in direction_squares:
 		var panel: Panel = direction_squares[dir]
 		if panel != null and is_instance_valid(panel):
-			panel.pivot_offset = panel.size / 2.0
+			panel.rotation_degrees = 0.0
+			panel.scale = Vector2.ONE
 
-	var board: Control = $GameScreen/Board
-	if board != null and is_instance_valid(board):
-		board.pivot_offset = board.size / 2.0
-		var board_tilt: float = 9.0 if randf() > 0.5 else -9.0
-		var b_tween := create_tween()
-		# Punch out with tilt
-		b_tween.set_parallel(true)
-		b_tween.set_trans(Tween.TRANS_BACK)
-		b_tween.set_ease(Tween.EASE_OUT)
-		b_tween.tween_property(board, "scale", Vector2(1.10, 1.10), 0.14)
-		b_tween.tween_property(board, "rotation_degrees", board_tilt, 0.14)
-		# Spring back
-		b_tween.chain().set_parallel(true)
-		b_tween.set_trans(Tween.TRANS_BACK)
-		b_tween.set_ease(Tween.EASE_OUT)
-		b_tween.tween_property(board, "scale", Vector2.ONE, 0.22)
-		b_tween.tween_property(board, "rotation_degrees", 0.0, 0.22)
+			# High-energy glowing neon border during the spin
+			var flash_style := _panel_style.duplicate()
+			var current_col: Color = direction_colors.get(dir, Color(0.2, 0.9, 1.0))
+			flash_style.bg_color = current_col.lightened(0.35)
+			flash_style.set_border_width_all(3)
+			flash_style.set_border_color(Color(2.0, 2.0, 2.0, 1.0))
+			flash_style.set_shadow_color(Color(0.2, 0.9, 1.0, 0.85))
+			flash_style.set_shadow_size(18)
+			panel.add_theme_stylebox_override("panel", flash_style)
 
-	# 2. Individual Squares 3D Card Flip & Rotating Spin Animation
-	var spin_dirs := {
-		"up": 360.0,
-		"down": -360.0,
-		"left": -360.0,
-		"right": 360.0
-	}
+	# Set pivot to the exact geometric center of the cross board (center_square)
+	var board_center: Vector2 = center_square.position + center_square.size / 2.0
+	board.pivot_offset = board_center
+	board.rotation_degrees = 0.0
 
-	for dir: String in direction_squares:
-		var panel: Panel = direction_squares[dir]
-		if panel == null or not is_instance_valid(panel):
-			continue
+	# Randomly choose clockwise (+360°) or counter-clockwise (-360°) spin
+	var spin_degrees: float = 360.0 if randf() > 0.5 else -360.0
+	var half_spin: float = spin_degrees * 0.5
 
-		# Clean reset of transforms
-		panel.rotation_degrees = 0.0
-		panel.scale = Vector2.ONE
+	var board_tween := create_tween()
 
-		# Bright neon flash style with ambient bloom
-		var flash_style := _panel_style.duplicate()
-		flash_style.bg_color = Color(1.35, 1.35, 1.35, 0.95)
-		flash_style.set_border_width_all(3)
-		flash_style.set_border_color(Color(2.0, 2.0, 2.0, 1.0))
-		flash_style.set_shadow_color(Color(0.2, 0.9, 1.0, 0.8))
-		flash_style.set_shadow_size(18)
-		panel.add_theme_stylebox_override("panel", flash_style)
+	# Phase 1: Accelerate into spin to 180° + scale lift (0.16s)
+	board_tween.set_parallel(true)
+	board_tween.set_trans(Tween.TRANS_QUAD)
+	board_tween.set_ease(Tween.EASE_IN)
+	board_tween.tween_property(board, "rotation_degrees", half_spin, 0.16)
+	board_tween.tween_property(board, "scale", Vector2(1.12, 1.12), 0.16)
 
-		var target_spin: float = spin_dirs.get(dir, 360.0)
-		var half_spin: float = target_spin * 0.5
+	# Phase 2: Mid-spin at 180°: Ignite new colors & emit vortex spark flares
+	board_tween.chain().tween_callback(func():
+		if is_instance_valid(board):
+			_apply_board_colors()
+			for dir: String in direction_squares:
+				var p: Panel = direction_squares[dir]
+				if p != null and is_instance_valid(p):
+					_burst_particles(p.global_position + p.size / 2.0, direction_colors.get(dir, Color.WHITE), 6)
+			_burst_particles(center_square.global_position + center_square.size / 2.0, Color.WHITE, 8)
+	)
 
-		var sq_tween := create_tween()
-		# Phase 1: Spin 180° + squeeze to edge-on (0.13s)
-		sq_tween.set_parallel(true)
-		sq_tween.set_trans(Tween.TRANS_QUAD)
-		sq_tween.set_ease(Tween.EASE_IN)
-		sq_tween.tween_property(panel, "rotation_degrees", half_spin, 0.13)
-		sq_tween.tween_property(panel, "scale", Vector2(0.08, 1.15), 0.13)
+	# Phase 3: Complete 360° spin with elastic overshoot snap & scale settle (0.22s)
+	board_tween.chain().set_parallel(true)
+	board_tween.set_trans(Tween.TRANS_BACK)
+	board_tween.set_ease(Tween.EASE_OUT)
+	board_tween.tween_property(board, "rotation_degrees", spin_degrees, 0.22)
+	board_tween.tween_property(board, "scale", Vector2.ONE, 0.22)
 
-		# Phase 2: At midpoint (edge-on), reveal new colors and emit spark flare
-		sq_tween.chain().tween_callback(func():
-			if is_instance_valid(panel):
-				_apply_board_colors()
-				_burst_particles(panel.global_position + panel.size / 2.0, direction_colors.get(dir, Color.WHITE), 5)
-		)
+	# Phase 4: Clean reset
+	board_tween.chain().tween_callback(func():
+		if is_instance_valid(board):
+			board.rotation_degrees = 0.0
+			board.scale = Vector2.ONE
+			_apply_board_colors()
+	)
 
-		# Phase 3: Spin to 360° and snap back open with elastic punch (0.20s)
-		sq_tween.chain().set_parallel(true)
-		sq_tween.set_trans(Tween.TRANS_BACK)
-		sq_tween.set_ease(Tween.EASE_OUT)
-		sq_tween.tween_property(panel, "rotation_degrees", target_spin, 0.20)
-		sq_tween.tween_property(panel, "scale", Vector2.ONE, 0.20)
-
-		# Phase 4: Clean reset of angle
-		sq_tween.chain().tween_callback(func():
-			if is_instance_valid(panel):
-				panel.rotation_degrees = 0.0
-				panel.scale = Vector2.ONE
-		)
-
-	# 3. Center target square dynamic pulse
+	# Center target square punch pulse
 	if center_square != null and is_instance_valid(center_square):
 		center_square.pivot_offset = center_square.size / 2.0
 		var c_tween := create_tween()
 		c_tween.set_trans(Tween.TRANS_BACK)
 		c_tween.set_ease(Tween.EASE_OUT)
-		c_tween.tween_property(center_square, "scale", Vector2(1.22, 1.22), 0.13)
-		c_tween.tween_property(center_square, "scale", Vector2.ONE, 0.20)
+		c_tween.tween_property(center_square, "scale", Vector2(1.22, 1.22), 0.16)
+		c_tween.tween_property(center_square, "scale", Vector2.ONE, 0.22)
 
 
 func _show_remap_banner(text: String) -> void:

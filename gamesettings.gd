@@ -141,7 +141,7 @@ const ACHIEVEMENTS := [
 	{"id": "iron_grip",       "name": "IRON GRIP",       "desc": "Complete 15 Hold Squares in a single game", "icon": "shield", "color": Color(0.0, 0.9, 1.0)},
 	{"id": "unstoppable",     "name": "UNSTOPPABLE",     "desc": "Reach a 150 streak in one game", "icon": "flame", "color": Color(0.92, 0.55, 0.08)},
 	{"id": "untouchable",     "name": "UNTOUCHABLE",     "desc": "Score 100,000+ points with no hearts lost", "icon": "shield", "color": Color(0.3, 0.65, 1.0)},
-	{"id": "clutch_genius",   "name": "CLUTCH GENIUS",   "desc": "Score 50 correct swipes in a row on 1 heart", "icon": "flame", "color": Color(1.0, 0.1, 0.27)},
+	{"id": "clutch_genius",   "name": "CLUTCH GENIUS",   "desc": "Score 50 correct swipes in a row on 1 heart (last life)", "icon": "flame", "color": Color(1.0, 0.1, 0.27)},
 	{"id": "frenzy_fanatic",  "name": "FRENZY FANATIC",  "desc": "Trigger Frenzy 20 times in one game", "icon": "bolt", "color": Color(1.0, 0.85, 0.15)},
 	{"id": "remap_master",    "name": "REMAP MASTER",    "desc": "Survive 40 direction remaps in one run", "icon": "compass", "color": Color(0.85, 0.4, 0.95)},
 	{"id": "fever_pitch",     "name": "FEVER PITCH",     "desc": "Trigger 3 Frenzies while holding 4x Multiplier", "icon": "bolt", "color": Color(0.83, 0.0, 0.98)},
