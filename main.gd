@@ -2528,14 +2528,14 @@ func _handle_walkthrough_swipe(direction: String) -> void:
 				_haptic_tap()
 				_burst_particles(_get_board_center(direction), direction_colors.get(direction, Color.WHITE), 12)
 				_flash_square(direction, Color.WHITE)
-				_walkthrough_overlay.flash_success("PERFECT! ⭐")
+				_walkthrough_overlay.flash_success("PERFECT!")
 				_advance_walkthrough()
 			else:
 				sfx.play("wrong")
 				_haptic_wrong()
 				_flash_center_red()
 				_shake_screen(3.0)
-				_walkthrough_overlay.flash_reminder("Swipe toward the matching square 👉")
+				_walkthrough_overlay.flash_reminder("Swipe toward the matching square!")
 
 		2: # Step 2: Streak & Multiplier
 			if direction == current_target_direction:
@@ -2547,7 +2547,7 @@ func _handle_walkthrough_swipe(direction: String) -> void:
 				_update_streak_visuals()
 				_burst_particles(_get_board_center(direction), direction_colors.get(direction, Color.WHITE), 14)
 				_flash_square(direction, Color(1.5, 0.35, 0.85, 1.0))
-				_walkthrough_overlay.flash_success("x2 MULTIPLIER! 🔥")
+				_walkthrough_overlay.flash_success("x2 MULTIPLIER!")
 				_advance_walkthrough()
 			else:
 				sfx.play("wrong")
@@ -2556,7 +2556,7 @@ func _handle_walkthrough_swipe(direction: String) -> void:
 
 		3: # Step 3: Hold Turn
 			if direction == current_target_direction:
-				_walkthrough_overlay.flash_reminder("HOLD your finger down until the ring fills!")
+				_walkthrough_overlay.flash_reminder("HOLD down until the ring fills!")
 			else:
 				_walkthrough_overlay.flash_reminder("Swipe DOWN and HOLD!")
 
@@ -2570,7 +2570,7 @@ func _handle_walkthrough_swipe(direction: String) -> void:
 					_walkthrough_overlay.set_step(4, "", "[ STEP 4 OF 6 - FRENZY ACTIVE! ]", "Frenzy unlocked! Swipe ANY direction for massive points!\nSwipe any square now!", false, true, Color(1.35, 1.15, 0.15))
 					_walkthrough_overlay.flash_success("FRENZY UNLEASHED!")
 				else:
-					_walkthrough_overlay.flash_reminder("Swipe toward the ⚡ lightning square!")
+					_walkthrough_overlay.flash_reminder("Swipe toward the LIGHTNING square!")
 			else:
 				# Practice rapid frenzy swipe: 1 practice swipe is plenty!
 				_walkthrough_advancing = true
@@ -2578,7 +2578,7 @@ func _handle_walkthrough_swipe(direction: String) -> void:
 				sfx.play("combo")
 				_burst_particles(_get_board_center(direction), Color(1.8, 1.4, 0.2), 16)
 				_flash_square(direction, Color.WHITE)
-				_walkthrough_overlay.flash_success("FRENZY MASTERED! ⚡")
+				_walkthrough_overlay.flash_success("FRENZY MASTERED!")
 				_end_frenzy_mode()
 				frenzy_exit_buffer = 0.0
 				_advance_walkthrough()
@@ -2590,10 +2590,10 @@ func _handle_walkthrough_swipe(direction: String) -> void:
 				sfx.play("combo")
 				_burst_particles(_get_board_center("right"), Color(0.2, 0.95, 1.0), 14)
 				_flash_square("right", Color(0.2, 0.95, 1.0, 0.9))
-				_walkthrough_overlay.flash_success("+5s CHARGE STORED! ⏱")
+				_walkthrough_overlay.flash_success("+5s CHARGE STORED!")
 				_advance_walkthrough()
 			else:
-				_walkthrough_overlay.flash_reminder("Swipe toward the ⏱ booster square!")
+				_walkthrough_overlay.flash_reminder("Swipe toward the BOOSTER square!")
 
 		6: # Step 6: Board Shuffle
 			if direction == current_target_direction:
@@ -2601,10 +2601,10 @@ func _handle_walkthrough_swipe(direction: String) -> void:
 				sfx.play("unlock")
 				_burst_particles(_get_board_center(direction), direction_colors.get(direction, Color.WHITE), 16)
 				_flash_square(direction, Color.WHITE)
-				_walkthrough_overlay.flash_success("SHUFFLE MASTER! 🎯")
+				_walkthrough_overlay.flash_success("SHUFFLE MASTER!")
 				_advance_walkthrough()
 			else:
-				_walkthrough_overlay.flash_reminder("Look at the center color on the new layout!")
+				_walkthrough_overlay.flash_reminder("Look at the center color on new layout!")
 
 		7: # Step 7: Ready to Play Briefing
 			_walkthrough_advancing = true
@@ -4489,7 +4489,7 @@ func _finish_hold_mode() -> void:
 			_haptic_celebration()
 			_burst_particles(_get_board_center("down"), Color(1.0, 0.9, 0.2), 16)
 			_flash_square("down", Color(1.0, 0.9, 0.2, 0.9))
-			_walkthrough_overlay.flash_success("MAX CHARGE! ⚡")
+			_walkthrough_overlay.flash_success("MAX CHARGE!")
 			_advance_walkthrough()
 		else:
 			# Released too early: keep hold turn active so player can retry immediately
@@ -4497,7 +4497,7 @@ func _finish_hold_mode() -> void:
 			sfx.play("wrong")
 			_haptic_wrong()
 			_setup_hold_turn_indicator()
-			_walkthrough_overlay.flash_reminder("Don't release yet! Hold until the ring fills! ⚡")
+			_walkthrough_overlay.flash_reminder("Hold down until the ring fills!")
 		return
 
 	var final_dur := clampf(hold_duration, 0.25, MAX_HOLD_DURATION)
@@ -5016,9 +5016,9 @@ func _on_wrong_swipe(_wrong_dir: String) -> void:
 		_shake_screen(3.0)
 		if _walkthrough_overlay != null:
 			if _walkthrough_step == 3:
-				_walkthrough_overlay.flash_reminder("Swipe DOWN and HOLD! ⚡")
+				_walkthrough_overlay.flash_reminder("Swipe DOWN and HOLD!")
 			else:
-				_walkthrough_overlay.flash_reminder("Swipe toward the matching color 👉")
+				_walkthrough_overlay.flash_reminder("Swipe toward the matching color!")
 		return
 
 	_cleanup_hold_ui()

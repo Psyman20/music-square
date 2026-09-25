@@ -194,13 +194,24 @@ func _build_ui() -> void:
 	_prompt_label.name = "WalkthroughPromptLabel"
 	_prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_prompt_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_prompt_label.add_theme_font_size_override("font_size", 18)
+	_prompt_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_prompt_label.add_theme_font_size_override("font_size", 13)
 	_prompt_label.add_theme_color_override("font_color", Color(1.0, 0.9, 0.2))
 	_prompt_label.add_theme_color_override("font_outline_color", Color(0.04, 0.04, 0.1, 1.0))
-	_prompt_label.add_theme_constant_override("outline_size", 6)
+	_prompt_label.add_theme_constant_override("outline_size", 4)
 	_prompt_label.visible = false
 	if arcade_font != null:
 		_prompt_label.add_theme_font_override("font", arcade_font)
+
+	var prompt_bg := StyleBoxFlat.new()
+	prompt_bg.bg_color = Color(0.05, 0.08, 0.16, 0.94)
+	prompt_bg.set_corner_radius_all(8)
+	prompt_bg.set_border_width_all(2)
+	prompt_bg.set_border_color(Color(1.0, 0.85, 0.2, 0.9))
+	prompt_bg.set_content_margin_all(6)
+	prompt_bg.set_shadow_color(Color(0, 0, 0, 0.5))
+	prompt_bg.set_shadow_size(6)
+	_prompt_label.add_theme_stylebox_override("normal", prompt_bg)
 	add_child(_prompt_label)
 
 
@@ -246,9 +257,13 @@ func _update_card_layout() -> void:
 
 	if _prompt_label != null and is_instance_valid(_prompt_label):
 		_prompt_label.set_anchors_preset(Control.PRESET_TOP_LEFT)
-		var prompt_w: float = minf(460.0, vp_w - 20.0)
-		_prompt_label.size = Vector2(prompt_w, 32.0)
-		_prompt_label.global_position = Vector2((vp_w - prompt_w) / 2.0, maxf(10.0, card_y - 36.0))
+		var prompt_w: float = minf(320.0, vp_w - 32.0)
+		var prompt_h: float = 46.0
+		var prompt_x: float = (vp_w - prompt_w) / 2.0
+		var prompt_y: float = maxf(12.0, card_y - prompt_h - 8.0)
+		_prompt_label.size = Vector2(prompt_w, prompt_h)
+		_prompt_label.global_position = Vector2(prompt_x, prompt_y)
+		_prompt_label.pivot_offset = Vector2(prompt_w / 2.0, prompt_h / 2.0)
 
 
 func set_step(new_step: int, new_target: String, title: String, description: String, hold_mode: bool = false, frenzy_mode: bool = false, p_color: Color = Color(0.2, 0.95, 1.0)) -> void:
@@ -355,18 +370,24 @@ func _show_prompt(text: String, col: Color) -> void:
 
 	_prompt_label.text = text
 	_prompt_label.add_theme_color_override("font_color", col)
+	var style := _prompt_label.get_theme_stylebox("normal") as StyleBoxFlat
+	if style != null:
+		var s := style.duplicate() as StyleBoxFlat
+		s.set_border_color(Color(col.r, col.g, col.b, 0.9))
+		_prompt_label.add_theme_stylebox_override("normal", s)
+
 	_prompt_label.modulate = Color(1, 1, 1, 0)
-	_prompt_label.scale = Vector2(0.85, 0.85)
+	_prompt_label.scale = Vector2(0.92, 0.92)
 	_prompt_label.pivot_offset = _prompt_label.size / 2.0
 	_prompt_label.visible = true
 
 	_prompt_tween = create_tween()
 	_prompt_tween.set_parallel(true)
 	_prompt_tween.tween_property(_prompt_label, "modulate", Color.WHITE, 0.12)
-	_prompt_tween.tween_property(_prompt_label, "scale", Vector2(1.08, 1.08), 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_prompt_tween.tween_property(_prompt_label, "scale", Vector2(1.02, 1.02), 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
-	_prompt_tween.chain().tween_property(_prompt_label, "scale", Vector2.ONE, 0.15)
-	_prompt_tween.chain().tween_interval(1.1)
+	_prompt_tween.chain().tween_property(_prompt_label, "scale", Vector2.ONE, 0.12)
+	_prompt_tween.chain().tween_interval(1.3)
 	_prompt_tween.chain().tween_property(_prompt_label, "modulate", Color(1, 1, 1, 0), 0.25)
 	_prompt_tween.chain().tween_callback(func(): _prompt_label.visible = false)
 

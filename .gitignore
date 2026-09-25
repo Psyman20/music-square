@@ -20,10 +20,14 @@ mono_crash.*.json
 .gradle/
 **/android/build/.gradle/
 **/android/build/build/
+**/android/build/libs/
+**/android/build/assetPackInstallTime/
+**/android/build/src/instrumented/
+**/android/build/src/androidTestInstrumented/
 **/android/build/local.properties
 
 # Exported binaries & Keystores (keep private / off GitHub)
-build/
+/build/
 *.apk
 *.aab
 *.keystore
