@@ -13,7 +13,7 @@ config_version=5
 config/name="MusicSquare"
 run/main_scene="uid://bdtvy1winsayt"
 config/features=PackedStringArray("4.7", "Mobile")
-config/icon="res://icon.svg"
+config/icon="uid://ic86cxdh3xrl"
 
 [autoload]
 

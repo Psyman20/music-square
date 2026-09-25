@@ -15,6 +15,7 @@ var target_dir: String = "right"
 var is_hold: bool = false
 var is_frenzy_practice: bool = false
 var is_final_step: bool = false
+var step_color: Color = Color(0.2, 0.95, 1.0)
 var arcade_font: Font = null
 
 # Child UI nodes
@@ -48,7 +49,7 @@ func _build_ui() -> void:
 	# 1. Skip Button (Positioned at TOP-RIGHT of screen to avoid ANY text overlap)
 	_skip_btn = Button.new()
 	_skip_btn.name = "WalkthroughSkipBtn"
-	_skip_btn.text = "SKIP ⏩"
+	_skip_btn.text = "SKIP"
 	_skip_btn.mouse_filter = Control.MOUSE_FILTER_STOP
 	_skip_btn.add_theme_font_size_override("font_size", 12)
 	_skip_btn.add_theme_color_override("font_color", Color(0.3, 0.9, 1.0))
@@ -115,6 +116,8 @@ func _build_ui() -> void:
 	_badge_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2))
 	_badge_label.add_theme_color_override("font_outline_color", Color(0.05, 0.08, 0.18, 1.0))
 	_badge_label.add_theme_constant_override("outline_size", 4)
+	_badge_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_badge_label.custom_minimum_size = Vector2(10, 0)
 	if arcade_font != null:
 		_badge_label.add_theme_font_override("font", arcade_font)
 	_vbox_container.add_child(_badge_label)
@@ -125,6 +128,7 @@ func _build_ui() -> void:
 	_desc_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_desc_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_desc_label.custom_minimum_size = Vector2(10, 0)
 	_desc_label.add_theme_font_size_override("font_size", 13)
 	_desc_label.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0))
 	_desc_label.add_theme_color_override("font_outline_color", Color(0.04, 0.04, 0.12, 1.0))
@@ -156,7 +160,7 @@ func _build_ui() -> void:
 	# 7. Final Step Glowing Action Button: "LET'S PLAY!" or "BACK TO OPTIONS" (Step 7 only)
 	_play_btn = Button.new()
 	_play_btn.name = "WalkthroughPlayBtn"
-	_play_btn.text = "LET'S PLAY! 🚀"
+	_play_btn.text = "LET'S PLAY!"
 	_play_btn.mouse_filter = Control.MOUSE_FILTER_STOP
 	_play_btn.visible = false
 	_play_btn.custom_minimum_size = Vector2(250, 42)
@@ -230,11 +234,11 @@ func _update_card_layout() -> void:
 
 	# Calculate Card dimensions
 	var card_w: float = clampf(vp_w - 32.0, 280.0, 500.0)
-	var card_h: float = 165.0 if is_final_step else 145.0
+	var card_h: float = 210.0 if is_final_step else 165.0
 	var card_x: float = (vp_w - card_w) / 2.0
 	var card_y: float = board_bottom + 14.0
 	if card_y + card_h > vp_h - 12.0:
-		card_y = vp_h - card_h - 12.0
+		card_y = maxf(110.0, vp_h - card_h - 12.0)
 
 	_card_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	_card_panel.size = Vector2(card_w, card_h)
@@ -247,12 +251,13 @@ func _update_card_layout() -> void:
 		_prompt_label.global_position = Vector2((vp_w - prompt_w) / 2.0, maxf(10.0, card_y - 36.0))
 
 
-func set_step(new_step: int, new_target: String, title: String, description: String, hold_mode: bool = false, frenzy_mode: bool = false) -> void:
+func set_step(new_step: int, new_target: String, title: String, description: String, hold_mode: bool = false, frenzy_mode: bool = false, p_color: Color = Color(0.2, 0.95, 1.0)) -> void:
 	step_index = new_step
 	target_dir = new_target
 	is_hold = hold_mode
 	is_frenzy_practice = frenzy_mode
 	is_final_step = false
+	step_color = p_color
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	if _play_btn != null:
@@ -273,7 +278,7 @@ func set_step(new_step: int, new_target: String, title: String, description: Str
 	queue_redraw()
 
 
-func show_final_step(title: String, description: String, button_text: String = "LET'S PLAY! 🚀") -> void:
+func show_final_step(title: String, description: String, button_text: String = "LET'S PLAY!") -> void:
 	step_index = 7
 	target_dir = ""
 	is_hold = false
@@ -318,8 +323,8 @@ func _update_dots(active_step: int) -> void:
 		if i + 1 == active_step:
 			# Active step: glowing cyan pill
 			dot.custom_minimum_size = Vector2(28, 6)
-			style.bg_color = Color(0.2, 0.95, 1.0, 1.0)
-			style.set_shadow_color(Color(0.2, 0.95, 1.0, 0.6))
+			style.bg_color = Color(step_color.r, step_color.g, step_color.b, 1.0)
+			style.set_shadow_color(Color(step_color.r, step_color.g, step_color.b, 0.6))
 			style.set_shadow_size(6)
 		elif i + 1 < active_step:
 			# Completed step: solid calm blue
@@ -432,7 +437,7 @@ func _draw() -> void:
 	var p_start: Vector2 = c_local + dir_vec * 52.0
 	var p_end: Vector2 = t_local - dir_vec * 50.0
 
-	var target_color: Color = Color(0.2, 0.95, 1.0)
+	var target_color: Color = step_color
 
 	# --- 1. NEON DIRECTIONAL ARROW ---
 	var pulse: float = 1.0 + 0.12 * sin(Time.get_ticks_msec() * 0.007)
@@ -468,28 +473,34 @@ func _draw() -> void:
 			for i in range(1, 4):
 				var trail_prog: float = clampf(progress - float(i) * 0.07, 0.0, 1.0)
 				var trail_pos: Vector2 = p_start.lerp(p_end, trail_prog)
-				draw_circle(trail_pos, 10.0 - float(i) * 2.5, Color(0.2, 0.95, 1.0, 0.22 - float(i) * 0.05))
+				draw_circle(trail_pos, 10.0 - float(i) * 2.5, Color(step_color.r, step_color.g, step_color.b, 0.22 - float(i) * 0.05))
 
 			# Main glowing touch circle
-			draw_circle(finger_pos, 18.0, Color(0.2, 0.95, 1.0, 0.35))
+			draw_circle(finger_pos, 18.0, Color(step_color.r, step_color.g, step_color.b, 0.35))
 			draw_circle(finger_pos, 9.0, Color.WHITE)
-			draw_arc(finger_pos, 24.0, 0.0, TAU, 32, Color(0.2, 0.95, 1.0, 0.75), 2.5)
+			draw_arc(finger_pos, 24.0, 0.0, TAU, 32, Color(step_color.r, step_color.g, step_color.b, 0.75), 2.5)
 	else:
 		# Hold gesture: Hand holds target square with pulsing radial charges and ripples
 		var hold_cycle: float = fmod(Time.get_ticks_msec() * 0.001, 1.8) / 1.8
 		var ring_r: float = 34.0
 
+		var bar_color: Color
+		if hold_cycle < 0.5:
+			bar_color = Color(0.2, 0.95, 1.0).lerp(Color(1.0, 0.9, 0.15), hold_cycle * 2.0)
+		else:
+			bar_color = Color(1.0, 0.9, 0.15).lerp(Color(1.0, 0.45, 0.1), (hold_cycle - 0.5) * 2.0)
+
 		# Expanding ripple wave
 		var ripple_r: float = ring_r + hold_cycle * 36.0
 		var ripple_a: float = (1.0 - hold_cycle) * 0.75
-		draw_arc(t_local, ripple_r, 0.0, TAU, 36, Color(0.2, 0.95, 1.0, ripple_a), 2.5)
+		draw_arc(t_local, ripple_r, 0.0, TAU, 36, Color(bar_color.r, bar_color.g, bar_color.b, ripple_a), 2.5)
 
 		# Charging radial ring
 		draw_arc(t_local, ring_r, 0.0, TAU, 36, Color(0.12, 0.16, 0.28, 0.5), 5.0)
-		draw_arc(t_local, ring_r, -PI * 0.5, -PI * 0.5 + TAU * hold_cycle, 36, Color(1.0, 0.9, 0.2, 0.95), 4.5)
+		draw_arc(t_local, ring_r, -PI * 0.5, -PI * 0.5 + TAU * hold_cycle, 36, Color(bar_color.r, bar_color.g, bar_color.b, 0.95), 4.5)
 
 		# Firm touch circle
-		draw_circle(t_local, 20.0, Color(0.2, 0.95, 1.0, 0.4))
+		draw_circle(t_local, 20.0, Color(bar_color.r, bar_color.g, bar_color.b, 0.4))
 		draw_circle(t_local, 10.0, Color.WHITE)
 
 

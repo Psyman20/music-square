@@ -46,6 +46,7 @@ extends Control
 @onready var revive_btn: Button = $GameOverScreen/GameOverPanel/ReviveBtn
 @onready var retry_btn: Button = $GameOverScreen/GameOverPanel/RetryBtn
 @onready var share_score_btn: Button = $GameOverScreen/GameOverPanel/ShareScoreBtn
+@onready var rate_app_btn: Button = $GameOverScreen/GameOverPanel/RateAppBtn
 @onready var go_menu_btn: Button = $GameOverScreen/GameOverPanel/GameOverMenuBtn
 
 # --- Tutorial Nodes ---
@@ -712,7 +713,7 @@ func _apply_panel_styles() -> void:
 
 func _setup_button_styles() -> void:
 	var accent := _theme_accent()
-	var buttons := [start_button, resume_btn, restart_btn, pause_menu_btn, retry_btn, share_score_btn, go_menu_btn, pause_button, revive_btn, tutorial_understood_btn]
+	var buttons := [start_button, resume_btn, restart_btn, pause_menu_btn, retry_btn, share_score_btn, rate_app_btn, go_menu_btn, pause_button, revive_btn, tutorial_understood_btn]
 	for btn: Button in buttons:
 		if btn == null or not is_instance_valid(btn):
 			continue
@@ -736,6 +737,8 @@ func _connect_signals() -> void:
 	retry_btn.pressed.connect(_on_retry_pressed)
 	if share_score_btn != null:
 		share_score_btn.pressed.connect(_on_share_score_pressed)
+	if rate_app_btn != null:
+		rate_app_btn.pressed.connect(_on_rate_app_pressed)
 	go_menu_btn.pressed.connect(_on_go_menu_pressed)
 	if tutorial_understood_btn != null:
 		tutorial_understood_btn.pressed.connect(_on_tutorial_understood_pressed)
@@ -2418,30 +2421,33 @@ func _setup_walkthrough_step(step: int) -> void:
 			# Step 1: Color Matching
 			current_target_direction = "right"
 			var col: Color = direction_colors.get("right", Color(0.12, 0.46, 0.88))
+			_last_target_color = col
 			var style := _center_panel_style.duplicate()
 			style.bg_color = col
 			center_square.add_theme_stylebox_override("panel", style)
 			center_square.queue_redraw()
 			_apply_board_colors()
 			_pulse_center()
-			_walkthrough_overlay.set_step(1, "right", "[ STEP 1 OF 6 • COLOR MATCH ]", "Look at the center square color.\nSwipe toward the MATCHING outer square!", false, false)
+			_walkthrough_overlay.set_step(1, "right", "[ STEP 1 OF 6 - COLOR MATCH ]", "Look at the center square color.\nSwipe toward the MATCHING outer square!", false, false, col)
 
 		2:
 			# Step 2: Combos & Multiplier
 			current_target_direction = "up"
 			var col: Color = direction_colors.get("up", Color(0.88, 0.22, 0.35))
+			_last_target_color = col
 			var style := _center_panel_style.duplicate()
 			style.bg_color = col
 			center_square.add_theme_stylebox_override("panel", style)
 			center_square.queue_redraw()
 			_apply_board_colors()
 			_pulse_center()
-			_walkthrough_overlay.set_step(2, "up", "[ STEP 2 OF 6 • STREAKS & MULTIPLIER ]", "Chain correct swipes without missing!\nEvery 5 swipes increases your MULTIPLIER up to 4x!", false, false)
+			_walkthrough_overlay.set_step(2, "up", "[ STEP 2 OF 6 - STREAKS & MULTIPLIER ]", "Chain correct swipes without missing!\nEvery 5 swipes increases your MULTIPLIER up to 4x!", false, false, col)
 
 		3:
 			# Step 3: Hold Squares
 			current_target_direction = "down"
 			var col: Color = direction_colors.get("down", Color(0.82, 0.72, 0.06))
+			_last_target_color = col
 			var style := _center_panel_style.duplicate()
 			style.bg_color = col
 			center_square.add_theme_stylebox_override("panel", style)
@@ -2450,7 +2456,7 @@ func _setup_walkthrough_step(step: int) -> void:
 			_setup_hold_turn_indicator()
 			_apply_board_colors()
 			_pulse_center()
-			_walkthrough_overlay.set_step(3, "down", "[ STEP 3 OF 6 • HOLD SQUARES ]", "When you see pulsing brackets:\nSWIPE and HOLD your finger until the charge ring fills!", true, false)
+			_walkthrough_overlay.set_step(3, "down", "[ STEP 3 OF 6 - HOLD SQUARES ]", "When you see pulsing brackets:\nSWIPE and HOLD your finger until the charge ring fills!", true, false, col)
 
 		4:
 			# Step 4: Frenzy Power-Up
@@ -2458,6 +2464,7 @@ func _setup_walkthrough_step(step: int) -> void:
 				_end_frenzy_mode()
 			current_target_direction = "up"
 			var col: Color = direction_colors.get("up", Color(0.88, 0.22, 0.35))
+			_last_target_color = col
 			var style := _center_panel_style.duplicate()
 			style.bg_color = col
 			center_square.add_theme_stylebox_override("panel", style)
@@ -2466,7 +2473,7 @@ func _setup_walkthrough_step(step: int) -> void:
 			powerup_type = "frenzy"
 			_apply_board_colors()
 			_pulse_center()
-			_walkthrough_overlay.set_step(4, "left", "[ STEP 4 OF 6 • FRENZY POWER-UP ]", "Swipe into the ⚡ LIGHTNING square!\nFrenzy unleashes rapid-fire scoring across all squares!", false, false)
+			_walkthrough_overlay.set_step(4, "left", "[ STEP 4 OF 6 - FRENZY POWER-UP ]", "Swipe into the LIGHTNING square!\nFrenzy unleashes rapid-fire scoring across all squares!", false, false, col)
 
 		5:
 			# Step 5: Time Booster (+5s)
@@ -2474,6 +2481,7 @@ func _setup_walkthrough_step(step: int) -> void:
 				_end_frenzy_mode()
 			current_target_direction = "left"
 			var col: Color = direction_colors.get("left", Color(0.10, 0.70, 0.38))
+			_last_target_color = col
 			var style := _center_panel_style.duplicate()
 			style.bg_color = col
 			center_square.add_theme_stylebox_override("panel", style)
@@ -2482,19 +2490,20 @@ func _setup_walkthrough_step(step: int) -> void:
 			powerup_type = "frenzy_boost"
 			_apply_board_colors()
 			_pulse_center()
-			_walkthrough_overlay.set_step(5, "right", "[ STEP 5 OF 6 • TIME BOOSTER ]", "Swipe the ⏱ BOOSTER to store +5s extra time!\nBooster charges make your future Frenzy runs last longer!", false, false)
+			_walkthrough_overlay.set_step(5, "right", "[ STEP 5 OF 6 - TIME BOOSTER ]", "Swipe the BOOSTER to store +5s extra time!\nBooster charges make your future Frenzy runs last longer!", false, false, col)
 
 		6:
 			# Step 6: Board Shuffle (Whirlwind 360° spin)
 			_remap_directions()
 			current_target_direction = "up"
 			var col: Color = direction_colors.get("up", Color(0.88, 0.22, 0.35))
+			_last_target_color = col
 			var style := _center_panel_style.duplicate()
 			style.bg_color = col
 			center_square.add_theme_stylebox_override("panel", style)
 			center_square.queue_redraw()
 			_pulse_center()
-			_walkthrough_overlay.set_step(6, "up", "[ STEP 6 OF 6 • BOARD SHUFFLE ]", "The board spins and colors swap periodically!\nRe-orient and swipe the new matching position!", false, false)
+			_walkthrough_overlay.set_step(6, "up", "[ STEP 6 OF 6 - BOARD SHUFFLE ]", "The board spins and colors swap periodically!\nRe-orient and swipe the new matching position!", false, false, col)
 
 		7:
 			# Step 7: Ready to Play / Completed Briefing
@@ -2502,9 +2511,9 @@ func _setup_walkthrough_step(step: int) -> void:
 				_end_frenzy_mode()
 			_apply_board_colors()
 			if _walkthrough_from_options:
-				_walkthrough_overlay.show_final_step("TUTORIAL COMPLETE! 🎯", "You've mastered all mechanics of Music Square!\nTap below or anywhere on screen to return to Options.", "BACK TO OPTIONS ↩")
+				_walkthrough_overlay.show_final_step("TUTORIAL COMPLETE!", "You've mastered all mechanics of Music Square!\nTap below or anywhere on screen to return to Options.", "BACK TO OPTIONS")
 			else:
-				_walkthrough_overlay.show_final_step("YOU'RE READY TO PLAY! 🎮", "3 Hearts: Wrong swipes or timing out loses a heart.\nMultipliers & Speed increase as you score higher!", "LET'S PLAY! 🚀")
+				_walkthrough_overlay.show_final_step("YOU'RE READY TO PLAY!", "3 Hearts: Wrong swipes or timing out loses a heart.\nMultipliers & Speed increase as you score higher!", "LET'S PLAY!")
 
 
 func _handle_walkthrough_swipe(direction: String) -> void:
@@ -2558,8 +2567,8 @@ func _handle_walkthrough_swipe(direction: String) -> void:
 					_burst_particles(_get_board_center("left"), Color(1.8, 1.4, 0.2), 16)
 					_activate_frenzy_mode()
 					_walkthrough_frenzy_swipes_done = 0
-					_walkthrough_overlay.set_step(4, "", "[ STEP 4 OF 6 • FRENZY ACTIVE! ⚡ ]", "Frenzy unlocked! Swipe ANY direction for massive points!\nSwipe any square now!", false, true)
-					_walkthrough_overlay.flash_success("FRENZY UNLEASHED! ⚡")
+					_walkthrough_overlay.set_step(4, "", "[ STEP 4 OF 6 - FRENZY ACTIVE! ]", "Frenzy unlocked! Swipe ANY direction for massive points!\nSwipe any square now!", false, true, Color(1.35, 1.15, 0.15))
+					_walkthrough_overlay.flash_success("FRENZY UNLEASHED!")
 				else:
 					_walkthrough_overlay.flash_reminder("Swipe toward the ⚡ lightning square!")
 			else:
@@ -3616,6 +3625,24 @@ func _on_share_score_pressed() -> void:
 	_share_game_score()
 
 
+func _on_rate_app_pressed() -> void:
+	sfx.play("tap")
+	_haptic_tap()
+	_open_google_play_rating()
+
+
+func _open_google_play_rating() -> void:
+	var package_name := "com.psygames.musicsquare"
+	var market_url := "market://details?id=" + package_name
+	var web_url := "https://play.google.com/store/apps/details?id=" + package_name
+	if OS.get_name() == "Android":
+		var err := OS.shell_open(market_url)
+		if err != OK:
+			OS.shell_open(web_url)
+	else:
+		OS.shell_open(web_url)
+
+
 func _share_game_score() -> void:
 	# Calculate game stats
 	var accuracy := 0.0
@@ -4299,7 +4326,7 @@ func _setup_hold_turn_indicator() -> void:
 	if _hold_indicator_label == null or not is_instance_valid(_hold_indicator_label):
 		_hold_indicator_label = Label.new()
 		_hold_indicator_label.name = "HoldIndicatorLabel"
-		_hold_indicator_label.text = "⚡ HOLD & CHARGE! ⚡"
+		_hold_indicator_label.text = "HOLD & CHARGE!"
 		_hold_indicator_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		_hold_indicator_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		_hold_indicator_label.add_theme_font_size_override("font_size", 20)
