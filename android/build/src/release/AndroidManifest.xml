@@ -30,7 +30,7 @@
 <meta-data
 		tools:replace="android:value"
 		android:name="com.google.android.gms.ads.APPLICATION_ID"
-		android:value="ca-app-pub-4818290372464100~3347511713"/>
+		android:value="ca-app-pub-4818290372464100~8189641857"/>
 
 <!-- End of manifest application element contents from AdmobPlugin -->
         <activity android:name=".GodotApp" tools:replace="android:screenOrientation,android:excludeFromRecents,android:resizeableActivity" tools:node="mergeOnlyAttributes" android:excludeFromRecents="false" android:screenOrientation="portrait" android:resizeableActivity="true">
