@@ -3503,6 +3503,8 @@ func _game_over() -> void:
 		_haptic_celebration()
 
 	frenzy_charges = 0
+	if has_node("/root/AdManager"):
+		get_node("/root/AdManager").preload_rewarded_ad()
 	_update_frenzy_charge_ui()
 
 	# Populate game over screen
