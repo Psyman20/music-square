@@ -53,8 +53,8 @@ extends Control
 # --- Tutorial Nodes ---
 @onready var tutorial_understood_btn: Button = $TutorialScreen/TutorialPanel/TutorialUnderstoodBtn
 
-const CURRENT_VERSION_NAME: String = "1.0.5"
-const CURRENT_VERSION_CODE: int = 6
+const CURRENT_VERSION_NAME: String = "1.0.6"
+const CURRENT_VERSION_CODE: int = 7
 
 # --- Game State ---
 var state: GameSettings.GameState = GameSettings.GameState.MENU
