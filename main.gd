@@ -81,6 +81,7 @@ var turns_until_remap: int = randi_range(GameSettings.REMAP_INTERVAL_TURNS_MIN, 
 var _center_scale_locked := false
 var _last_target_color: Color = Color(0, 0, 0, 0)
 var _has_revived_this_game: bool = false
+var _revive_ready_to_resume: bool = false
 
 # --- Floating text labels that persist until the next swipe ---
 var _persistent_labels: Array[Label]
@@ -763,6 +764,7 @@ func _setup_initial_game_state() -> void:
 	lives = settings.MAX_LIVES
 	_last_displayed_lives = settings.MAX_LIVES
 	_has_revived_this_game = false
+	_revive_ready_to_resume = false
 	streak = 0
 	best_streak_this_game = 0
 	total_correct = 0
@@ -3601,9 +3603,8 @@ func _game_over() -> void:
 	_animate_score_countup(final_score_label, score, 1.2)
 
 	# Configure revive button (can only revive once per game run)
-	if revive_btn != null:
-		revive_btn.visible = not _has_revived_this_game
-		revive_btn.disabled = false
+	_revive_ready_to_resume = false
+	_reset_revive_button_ui()
 
 	# Check achievements (only on legitimate, non-tampered runs)
 	if not _tamper_flagged:
@@ -3613,10 +3614,12 @@ func _game_over() -> void:
 
 
 func _restart_game() -> void:
+	_revive_ready_to_resume = false
 	_fade_transition(_start_game)
 
 
 func _go_to_menu() -> void:
+	_revive_ready_to_resume = false
 	_fade_transition(_show_menu)
 
 
@@ -3649,23 +3652,121 @@ func _on_go_menu_pressed() -> void:
 	_go_to_menu()
 
 
+func _reset_revive_button_ui() -> void:
+	if revive_btn == null or not is_instance_valid(revive_btn):
+		return
+	revive_btn.visible = not _has_revived_this_game
+	revive_btn.disabled = false
+	revive_btn.text = "WATCH AD (+3 LIVES)"
+	revive_btn.add_theme_font_size_override("font_size", 15)
+	revive_btn.add_theme_color_override("font_color", Color(1.0, 0.9, 0.2, 1.0))
+	revive_btn.add_theme_color_override("font_hover_color", Color(1.0, 1.0, 0.6, 1.0))
+	revive_btn.pivot_offset = revive_btn.size / 2.0
+	revive_btn.scale = Vector2.ONE
+	var accent := _theme_accent()
+	var hover := _btn_style.duplicate()
+	hover.set_border_color(Color(accent.r, accent.g, accent.b, 0.9))
+	hover.set_shadow_color(Color(accent.r, accent.g, accent.b, 0.6))
+	hover.set_shadow_size(10)
+	revive_btn.add_theme_stylebox_override("normal", _btn_style)
+	revive_btn.add_theme_stylebox_override("hover", hover)
+	revive_btn.add_theme_stylebox_override("pressed", hover)
+
+
 func _on_revive_pressed() -> void:
 	sfx.play("tap")
-	if revive_btn != null:
+	_haptic_tap()
+	if _revive_ready_to_resume:
+		# Player watched the ad, lives restored, and now taps RESUME GAME
+		_has_revived_this_game = true
+		_revive_ready_to_resume = false
+		if revive_btn != null and is_instance_valid(revive_btn):
+			revive_btn.disabled = true
+		_fade_transition(_revive_and_continue)
+		return
+
+	# First step: User taps to watch the rewarded ad
+	if revive_btn != null and is_instance_valid(revive_btn):
 		revive_btn.disabled = true
-	# Trigger simulated rewarded ad view / reward callback
+		revive_btn.text = "LOADING AD..."
+
+	# Trigger rewarded ad view / reward callback
 	_show_rewarded_ad_and_revive()
 
 
 func _show_rewarded_ad_and_revive() -> void:
+	var on_reward_granted := func():
+		_on_revive_reward_granted()
+
+	var on_dismissed_without_reward := func():
+		if not _revive_ready_to_resume:
+			_reset_revive_button_ui()
+
+	# Safety fallback in case ad fails silently or gets stuck
+	get_tree().create_timer(12.0).timeout.connect(func():
+		if not _revive_ready_to_resume and state == settings.GameState.GAME_OVER and revive_btn != null and is_instance_valid(revive_btn) and revive_btn.disabled:
+			_reset_revive_button_ui()
+	)
+
 	if has_node("/root/AdManager"):
-		get_node("/root/AdManager").show_rewarded_ad(func():
-			_has_revived_this_game = true
-			_fade_transition(_revive_and_continue)
-		)
+		get_node("/root/AdManager").show_rewarded_ad(on_reward_granted, on_dismissed_without_reward)
 	else:
-		_has_revived_this_game = true
-		_fade_transition(_revive_and_continue)
+		on_reward_granted.call()
+
+
+func _on_revive_reward_granted() -> void:
+	# 1. Restore lives right away so user sees full hearts
+	lives = settings.MAX_LIVES
+	_last_displayed_lives = 0
+	_update_lives_display()
+
+	# Animate all hearts popping back
+	for i in range(hearts.size()):
+		if hearts[i] != null and is_instance_valid(hearts[i]):
+			var heart := hearts[i]
+			heart.pivot_offset = heart.size / 2.0
+			heart.scale = Vector2(0.2, 0.2)
+			var htw := create_tween()
+			htw.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+			htw.tween_property(heart, "scale", Vector2(1.35, 1.35), 0.18 + float(i) * 0.05)
+			htw.tween_property(heart, "scale", Vector2.ONE, 0.12)
+
+	# 2. Sound & celebratory cues
+	sfx.play("combo")
+	_haptic_celebration()
+
+	# 3. Mark ready to resume
+	_revive_ready_to_resume = true
+
+	# 4. Transform revive button into RESUME GAME button
+	if revive_btn != null and is_instance_valid(revive_btn):
+		revive_btn.disabled = false
+		revive_btn.text = "RESUME GAME"
+		revive_btn.add_theme_font_size_override("font_size", 17)
+		revive_btn.add_theme_color_override("font_color", Color(0.2, 1.0, 0.45, 1.0))
+		revive_btn.add_theme_color_override("font_hover_color", Color(0.5, 1.0, 0.7, 1.0))
+
+		# Vibrant neon-green button styling
+		var resume_style := _btn_style.duplicate()
+		resume_style.bg_color = Color(0.06, 0.22, 0.12, 0.92)
+		resume_style.set_border_color(Color(0.2, 0.95, 0.45, 0.95))
+		resume_style.set_shadow_color(Color(0.15, 0.9, 0.4, 0.55))
+		resume_style.set_shadow_size(12)
+		revive_btn.add_theme_stylebox_override("normal", resume_style)
+
+		var resume_hover := resume_style.duplicate()
+		resume_hover.bg_color = Color(0.10, 0.30, 0.18, 0.95)
+		resume_hover.set_border_color(Color(0.4, 1.0, 0.65, 1.0))
+		resume_hover.set_shadow_size(16)
+		revive_btn.add_theme_stylebox_override("hover", resume_hover)
+		revive_btn.add_theme_stylebox_override("pressed", resume_hover)
+
+		# Punch scale animation to highlight button readiness
+		revive_btn.pivot_offset = revive_btn.size / 2.0
+		var tw := create_tween()
+		tw.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tw.tween_property(revive_btn, "scale", Vector2(1.12, 1.12), 0.15)
+		tw.tween_property(revive_btn, "scale", Vector2.ONE, 0.15)
 
 
 func _revive_and_continue() -> void:

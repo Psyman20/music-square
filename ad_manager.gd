@@ -8,6 +8,7 @@ const REWARDED_TEST_UNIT_ID := "ca-app-pub-3940256099942544/5224354917"
 
 var _admob: Node = null
 var _on_reward_callback: Callable
+var _on_dismiss_callback: Callable
 var _is_ad_loading: bool = false
 var _is_initialized: bool = false
 
@@ -74,14 +75,18 @@ func load_rewarded_ad() -> void:
 	if _admob.has_method("load_rewarded_ad"):
 		_admob.load_rewarded_ad()
 
-func show_rewarded_ad(on_reward: Callable) -> void:
+func show_rewarded_ad(on_reward: Callable, on_dismiss: Callable = Callable()) -> void:
 	_on_reward_callback = on_reward
+	_on_dismiss_callback = on_dismiss
 	
 	# Fallback if running in editor or without native mobile plugin
 	if _admob == null or not Engine.has_singleton("AdmobPlugin"):
 		print("[AdManager] Editor / desktop mode: Simulating rewarded ad.")
 		if _on_reward_callback.is_valid():
-			_on_reward_callback.call()
+			var cb := _on_reward_callback
+			_on_reward_callback = Callable()
+			_on_dismiss_callback = Callable()
+			cb.call()
 		return
 	
 	# Check if an ad is ready to show
@@ -93,7 +98,10 @@ func show_rewarded_ad(on_reward: Callable) -> void:
 		load_rewarded_ad()
 		# Grant the reward so player is not blocked if Google returns No Fill
 		if _on_reward_callback.is_valid():
-			_on_reward_callback.call()
+			var cb := _on_reward_callback
+			_on_reward_callback = Callable()
+			_on_dismiss_callback = Callable()
+			cb.call()
 
 func _on_rewarded_ad_loaded(_ad_info: Variant, _response_info: Variant) -> void:
 	_is_ad_loading = false
@@ -132,8 +140,21 @@ func _on_rewarded_ad_user_earned_reward(_ad_info: Variant, _reward_data: Variant
 func _on_rewarded_ad_failed_to_show(_ad_info: Variant, error_data: Variant) -> void:
 	print("[AdManager] Rewarded ad failed to show: ", error_data)
 	_on_reward_callback = Callable()
+	if _on_dismiss_callback.is_valid():
+		var dcb := _on_dismiss_callback
+		_on_dismiss_callback = Callable()
+		dcb.call()
 	load_rewarded_ad()
 
 func _on_rewarded_ad_dismissed(_ad_info: Variant) -> void:
 	print("[AdManager] Rewarded ad dismissed. Preloading next ad...")
+	if _on_reward_callback.is_valid():
+		# Ad was dismissed before user earned reward
+		_on_reward_callback = Callable()
+		if _on_dismiss_callback.is_valid():
+			var dcb := _on_dismiss_callback
+			_on_dismiss_callback = Callable()
+			dcb.call()
+	else:
+		_on_dismiss_callback = Callable()
 	load_rewarded_ad()
