@@ -1,0 +1,446 @@
+[gd_scene format=3 uid="uid://pv540vertical02"]
+
+[ext_resource type="Script" path="res://promo_director.gd" id="1_director"]
+[ext_resource type="PackedScene" uid="uid://bdtvy1winsayt" path="res://main.tscn" id="2_main"]
+[ext_resource type="Script" path="res://promo_equalizer.gd" id="3_equalizer"]
+[ext_resource type="Texture2D" path="res://icon_512.png" id="4_icon"]
+[ext_resource type="FontFile" path="res://fonts/Orbitron.ttf" id="5_font"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_feature_v"]
+bg_color = Color(0.07, 0.08, 0.16, 0.94)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(1, 0, 0.5, 0.85)
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
+shadow_color = Color(1, 0, 0.5, 0.25)
+shadow_size = 12
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_lb_v"]
+bg_color = Color(0.06, 0.07, 0.14, 0.96)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(1, 0.9, 0, 0.85)
+corner_radius_top_left = 18
+corner_radius_top_right = 18
+corner_radius_bottom_right = 18
+corner_radius_bottom_left = 18
+shadow_color = Color(1, 0.8, 0, 0.3)
+shadow_size = 18
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_badge_v"]
+bg_color = Color(0.05, 0.06, 0.12, 0.95)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.2, 0.6, 1, 0.8)
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
+
+[node name="PromoVertical" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_director")
+is_landscape = false
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.08, 0.05, 0.14, 1)
+
+[node name="SubViewportContainer" type="SubViewportContainer" parent="."]
+layout_mode = 0
+offset_top = 0.0
+offset_right = 540.0
+offset_bottom = 960.0
+
+[node name="SubViewport" type="SubViewport" parent="SubViewportContainer"]
+handle_input_locally = false
+size = Vector2i(540, 960)
+render_target_update_mode = 4
+
+[node name="Main" parent="SubViewportContainer/SubViewport" instance=ExtResource("2_main")]
+
+[node name="TopHeader" type="Control" parent="."]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 16.0
+offset_right = 520.0
+offset_bottom = 76.0
+
+[node name="Icon" type="TextureRect" parent="TopHeader"]
+layout_mode = 0
+offset_left = 4.0
+offset_top = 2.0
+offset_right = 48.0
+offset_bottom = 46.0
+texture = ExtResource("4_icon")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Title" type="Label" parent="TopHeader"]
+layout_mode = 0
+offset_left = 58.0
+offset_top = 4.0
+offset_right = 320.0
+offset_bottom = 30.0
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 20
+theme_override_colors/font_color = Color(1, 0.2, 0.65, 1)
+text = "MUSIC SQUARE"
+
+[node name="Tagline" type="Label" parent="TopHeader"]
+layout_mode = 0
+offset_left = 60.0
+offset_top = 28.0
+offset_right = 320.0
+offset_bottom = 46.0
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 11
+theme_override_colors/font_color = Color(0, 0.94, 1, 1)
+text = "SWIPE TO THE BEAT"
+
+[node name="ScoreValue" type="Label" parent="TopHeader"]
+layout_mode = 0
+offset_left = 330.0
+offset_top = 8.0
+offset_right = 490.0
+offset_bottom = 44.0
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 26
+theme_override_colors/font_color = Color(1, 0.9, 0.1, 1)
+text = "0"
+horizontal_alignment = 2
+
+[node name="FeatureCard" type="Panel" parent="."]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 75.0
+offset_right = 520.0
+offset_bottom = 180.0
+pivot_offset = Vector2(250, 52)
+theme_override_styles/panel = SubResource("StyleBoxFlat_feature_v")
+
+[node name="IconLabel" type="Label" parent="FeatureCard"]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 16.0
+offset_right = 60.0
+offset_bottom = 60.0
+theme_override_font_sizes/font_size = 34
+text = "🎮"
+
+[node name="TitleLabel" type="Label" parent="FeatureCard"]
+layout_mode = 0
+offset_left = 68.0
+offset_top = 16.0
+offset_right = 485.0
+offset_bottom = 42.0
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 17
+theme_override_colors/font_color = Color(1, 0.25, 0.7, 1)
+text = "LIGHTNING REFLEXES"
+
+[node name="DescLabel" type="Label" parent="FeatureCard"]
+layout_mode = 0
+offset_left = 68.0
+offset_top = 46.0
+offset_right = 485.0
+offset_bottom = 96.0
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+text = "Match the neon target color & swipe before time expires!"
+autowrap_mode = 3
+
+[node name="LeaderboardCard" type="Panel" parent="."]
+layout_mode = 0
+offset_left = 25.0
+offset_top = 280.0
+offset_right = 515.0
+offset_bottom = 640.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_lb_v")
+
+[node name="LBTitle" type="Label" parent="LeaderboardCard"]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 18.0
+offset_right = 470.0
+offset_bottom = 46.0
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 20
+theme_override_colors/font_color = Color(1, 0.9, 0.1, 1)
+text = "🏆 GLOBAL LEADERBOARDS"
+horizontal_alignment = 1
+
+[node name="LBSub" type="Label" parent="LeaderboardCard"]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 48.0
+offset_right = 470.0
+offset_bottom = 68.0
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(0.65, 0.7, 0.85, 1)
+text = "GOOGLE PLAY GAMES SERVICES"
+horizontal_alignment = 1
+
+[node name="Row1" type="Label" parent="LeaderboardCard"]
+layout_mode = 0
+offset_left = 30.0
+offset_top = 95.0
+offset_right = 460.0
+offset_bottom = 125.0
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 17
+theme_override_colors/font_color = Color(1, 0.9, 0.15, 1)
+text = "🥇 #1   PSYMAN            842,500"
+
+[node name="Row2" type="Label" parent="LeaderboardCard"]
+layout_mode = 0
+offset_left = 30.0
+offset_top = 140.0
+offset_right = 460.0
+offset_bottom = 170.0
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 16
+theme_override_colors/font_color = Color(0.9, 0.92, 0.98, 1)
+text = "🥈 #2   CYBER_NINJA       791,200"
+
+[node name="Row3" type="Label" parent="LeaderboardCard"]
+layout_mode = 0
+offset_left = 30.0
+offset_top = 185.0
+offset_right = 460.0
+offset_bottom = 215.0
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 16
+theme_override_colors/font_color = Color(1, 0.6, 0.2, 1)
+text = "🥉 #3   RETRO_KING        684,000"
+
+[node name="Row4" type="Label" parent="LeaderboardCard"]
+layout_mode = 0
+offset_left = 30.0
+offset_top = 230.0
+offset_right = 460.0
+offset_bottom = 260.0
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 16
+theme_override_colors/font_color = Color(0, 0.94, 1, 1)
+text = "⭐ #4   YOU?              CLAIM SPOT"
+
+[node name="LBCallout" type="Label" parent="LeaderboardCard"]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 285.0
+offset_right = 470.0
+offset_bottom = 310.0
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0.4, 0.85, 1, 1)
+text = "COMPETE WORLDWIDE • BEAT HIGH SCORE"
+horizontal_alignment = 1
+
+[node name="Equalizer" type="Control" parent="."]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 780.0
+offset_right = 520.0
+offset_bottom = 850.0
+script = ExtResource("3_equalizer")
+bar_count = 24
+bar_width = 14.0
+bar_gap = 7.0
+max_height = 65.0
+
+[node name="StoreBadge" type="Panel" parent="."]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 860.0
+offset_right = 520.0
+offset_bottom = 945.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_badge_v")
+
+[node name="BadgeSub" type="Label" parent="StoreBadge"]
+layout_mode = 0
+offset_left = 15.0
+offset_top = 8.0
+offset_right = 485.0
+offset_bottom = 26.0
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 11
+theme_override_colors/font_color = Color(0.6, 0.7, 0.85, 1)
+text = "FREE DOWNLOAD ON ANDROID"
+horizontal_alignment = 1
+
+[node name="BadgeTitle" type="Label" parent="StoreBadge"]
+layout_mode = 0
+offset_left = 15.0
+offset_top = 28.0
+offset_right = 485.0
+offset_bottom = 56.0
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 21
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+text = "GET IT ON GOOGLE PLAY"
+horizontal_alignment = 1
+
+[node name="FreeTag" type="Label" parent="StoreBadge"]
+layout_mode = 0
+offset_left = 15.0
+offset_top = 58.0
+offset_right = 485.0
+offset_bottom = 76.0
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 11
+theme_override_colors/font_color = Color(0.2, 0.95, 0.45, 1)
+text = "⚡ TAP TO PLAY • ZERO PAYWALLS ⚡"
+horizontal_alignment = 1
+
+[node name="IntroOverlay" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="BlackBg" type="ColorRect" parent="IntroOverlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.04, 0.03, 0.08, 0.96)
+
+[node name="IntroBox" type="VBoxContainer" parent="IntroOverlay"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -240.0
+offset_top = -150.0
+offset_right = 240.0
+offset_bottom = 150.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 14
+alignment = 1
+
+[node name="IconIntro" type="TextureRect" parent="IntroOverlay/IntroBox"]
+custom_minimum_size = Vector2(90, 90)
+layout_mode = 2
+size_flags_horizontal = 4
+texture = ExtResource("4_icon")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="HugeTitle" type="Label" parent="IntroOverlay/IntroBox"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 38
+theme_override_colors/font_color = Color(1, 0.2, 0.65, 1)
+text = "MUSIC SQUARE"
+horizontal_alignment = 1
+
+[node name="SubTitle" type="Label" parent="IntroOverlay/IntroBox"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 16
+theme_override_colors/font_color = Color(0, 0.94, 1, 1)
+text = "RHYTHM REFLEX ARCADE"
+horizontal_alignment = 1
+
+[node name="BeatNotice" type="Label" parent="IntroOverlay/IntroBox"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(1, 0.9, 0.2, 1)
+text = "⚡ READY YOUR REFLEXES ⚡"
+horizontal_alignment = 1
+
+[node name="OutroOverlay" type="Control" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="BlackBg" type="ColorRect" parent="OutroOverlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.04, 0.03, 0.08, 0.96)
+
+[node name="OutroBox" type="VBoxContainer" parent="OutroOverlay"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -240.0
+offset_top = -170.0
+offset_right = 240.0
+offset_bottom = 170.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 14
+alignment = 1
+
+[node name="IconOutro" type="TextureRect" parent="OutroOverlay/OutroBox"]
+custom_minimum_size = Vector2(100, 100)
+layout_mode = 2
+size_flags_horizontal = 4
+texture = ExtResource("4_icon")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="TitleOutro" type="Label" parent="OutroOverlay/OutroBox"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 36
+theme_override_colors/font_color = Color(1, 0.2, 0.65, 1)
+text = "MUSIC SQUARE"
+horizontal_alignment = 1
+
+[node name="CallToAction" type="Label" parent="OutroOverlay/OutroBox"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 20
+theme_override_colors/font_color = Color(1, 0.9, 0.1, 1)
+text = "PLAY FREE ON GOOGLE PLAY"
+horizontal_alignment = 1
+
+[node name="SubCta" type="Label" parent="OutroOverlay/OutroBox"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0, 0.94, 1, 1)
+text = "COMPETE ON THE LEADERBOARD NOW"
+horizontal_alignment = 1

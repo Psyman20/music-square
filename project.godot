@@ -20,6 +20,7 @@ config/icon="uid://ic86cxdh3xrl"
 AdManager="*res://ad_manager.gd"
 GodotPlayGameServices="*res://addons/GodotPlayGameServices/scripts/autoloads/godot_play_game_services.gd"
 LeaderboardManager="*res://leaderboard_manager.gd"
+UpdateManager="*res://update_manager.gd"
 _mcp_game_helper="*res://addons/godot_ai/runtime/game_helper.gd"
 
 [display]

@@ -53,6 +53,9 @@ extends Control
 # --- Tutorial Nodes ---
 @onready var tutorial_understood_btn: Button = $TutorialScreen/TutorialPanel/TutorialUnderstoodBtn
 
+const CURRENT_VERSION_NAME: String = "1.0.5"
+const CURRENT_VERSION_CODE: int = 6
+
 # --- Game State ---
 var state: GameSettings.GameState = GameSettings.GameState.MENU
 # --- In-Memory Anti-Cheat & Score Security ---
@@ -234,6 +237,16 @@ var _badges_scroll: ScrollContainer
 # --- Leaderboard UI ---
 var _leaderboard_button: Button
 
+# --- Google Play Update UI ---
+var _update_modal: Control
+var _update_panel: Panel
+var _update_version_badge: Label
+var _update_notes_label: Label
+var _update_now_btn: Button
+var _update_later_btn: Button
+var _pending_update_info: Dictionary = {}
+var _has_prompted_update: bool = false
+
 
 func _ready() -> void:
 	_init_secure_score()
@@ -293,11 +306,19 @@ func _ready() -> void:
 	# Tutorial visual UI setup
 	_setup_tutorial_ui()
 
+	# Google Play store update check UI
+	_setup_update_ui()
+
 	# Show menu
 	_show_menu()
 
 	# Setup initial state
 	_setup_initial_game_state()
+
+	# Check for Google Play updates
+	if has_node("/root/UpdateManager"):
+		get_node("/root/UpdateManager").update_available.connect(_on_update_available)
+		get_node("/root/UpdateManager").check_for_updates()
 
 
 func _get_theme() -> Dictionary:
@@ -2379,6 +2400,282 @@ func _on_tutorial_scroll_input(event: InputEvent, scroll: ScrollContainer) -> vo
 
 
 # =====================================================
+# GOOGLE PLAY UPDATE MODAL
+# =====================================================
+
+func _is_overlay_open() -> bool:
+	return (_songs_screen != null and _songs_screen.visible) \
+		or (_themes_screen != null and _themes_screen.visible) \
+		or (_options_screen != null and _options_screen.visible) \
+		or (_badges_screen != null and _badges_screen.visible) \
+		or (_update_modal != null and _update_modal.visible)
+
+
+func _setup_update_ui() -> void:
+	_update_modal = Control.new()
+	_update_modal.name = "UpdateModal"
+	_update_modal.visible = false
+	_update_modal.anchor_right = 1.0
+	_update_modal.anchor_bottom = 1.0
+	_update_modal.z_index = 100
+	add_child(_update_modal)
+
+	# Semi-transparent dark blur backdrop
+	var backdrop := ColorRect.new()
+	backdrop.name = "UpdateBackdrop"
+	backdrop.color = Color(0.04, 0.03, 0.08, 0.85)
+	backdrop.anchor_right = 1.0
+	backdrop.anchor_bottom = 1.0
+	backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
+	backdrop.gui_input.connect(func(event: InputEvent):
+		if (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT) \
+			or (event is InputEventScreenTouch and event.pressed):
+			if _update_later_btn != null and _update_later_btn.visible:
+				_on_update_later_pressed()
+	)
+	_update_modal.add_child(backdrop)
+
+	# Centered synthwave modal panel
+	_update_panel = Panel.new()
+	_update_panel.name = "UpdatePanel"
+	_update_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	var p_style := StyleBoxFlat.new()
+	p_style.set_corner_radius_all(22)
+	p_style.bg_color = Color(0.10, 0.08, 0.18, 0.98)
+	p_style.set_border_width_all(2)
+	p_style.set_border_color(Color(0.25, 1.0, 0.55, 0.95))
+	p_style.set_shadow_size(18)
+	p_style.set_shadow_color(Color(0.15, 0.95, 0.45, 0.45))
+	_update_panel.add_theme_stylebox_override("panel", p_style)
+
+	_update_panel.anchor_left = 0.5
+	_update_panel.anchor_right = 0.5
+	_update_panel.anchor_top = 0.5
+	_update_panel.anchor_bottom = 0.5
+	_update_panel.offset_left = -170.0
+	_update_panel.offset_right = 170.0
+	_update_panel.offset_top = -215.0
+	_update_panel.offset_bottom = 215.0
+	_update_modal.add_child(_update_panel)
+
+	# Title: UPDATE AVAILABLE
+	var title_lbl := Label.new()
+	title_lbl.name = "UpdateTitle"
+	title_lbl.text = "⚡ UPDATE AVAILABLE ⚡"
+	title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title_lbl.add_theme_font_size_override("font_size", 20)
+	title_lbl.add_theme_color_override("font_color", Color(0.25, 1.0, 0.55))
+	title_lbl.anchor_right = 1.0
+	title_lbl.offset_top = 18.0
+	title_lbl.offset_bottom = 48.0
+	_update_panel.add_child(title_lbl)
+
+	# Version Badge: v1.0.5 -> v1.0.6
+	_update_version_badge = Label.new()
+	_update_version_badge.name = "UpdateVersionBadge"
+	_update_version_badge.text = "v1.0.5  ➔  v1.0.6"
+	_update_version_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_update_version_badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_update_version_badge.add_theme_font_size_override("font_size", 15)
+	_update_version_badge.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3))
+	_update_version_badge.anchor_right = 1.0
+	_update_version_badge.offset_top = 50.0
+	_update_version_badge.offset_bottom = 76.0
+	_update_panel.add_child(_update_version_badge)
+
+	# Description text
+	var desc_lbl := Label.new()
+	desc_lbl.name = "UpdateDesc"
+	desc_lbl.text = "A new update for Music Square is waiting for you on Google Play!\nUpdate now to enjoy the latest songs, tracks, and improvements."
+	desc_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	desc_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	desc_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	desc_lbl.add_theme_font_size_override("font_size", 13)
+	desc_lbl.add_theme_color_override("font_color", Color(0.85, 0.82, 0.95))
+	desc_lbl.offset_left = 18.0
+	desc_lbl.offset_right = 322.0
+	desc_lbl.offset_top = 82.0
+	desc_lbl.offset_bottom = 158.0
+	_update_panel.add_child(desc_lbl)
+
+	# Release Notes Box
+	var notes_panel := Panel.new()
+	notes_panel.name = "NotesPanel"
+	var np_style := StyleBoxFlat.new()
+	np_style.set_corner_radius_all(12)
+	np_style.bg_color = Color(0.06, 0.05, 0.14, 0.9)
+	np_style.set_border_width_all(1)
+	np_style.set_border_color(Color(0.3, 0.4, 0.6, 0.5))
+	notes_panel.add_theme_stylebox_override("panel", np_style)
+	notes_panel.offset_left = 18.0
+	notes_panel.offset_right = 322.0
+	notes_panel.offset_top = 164.0
+	notes_panel.offset_bottom = 274.0
+	_update_panel.add_child(notes_panel)
+
+	_update_notes_label = Label.new()
+	_update_notes_label.name = "NotesLabel"
+	_update_notes_label.text = "• What's New:\n• Exciting new synthwave tracks & visual polish\n• Google Play Games Services leaderboard"
+	_update_notes_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_update_notes_label.add_theme_font_size_override("font_size", 12)
+	_update_notes_label.add_theme_color_override("font_color", Color(0.75, 0.85, 0.98))
+	_update_notes_label.offset_left = 12.0
+	_update_notes_label.offset_right = 292.0
+	_update_notes_label.offset_top = 8.0
+	_update_notes_label.offset_bottom = 102.0
+	notes_panel.add_child(_update_notes_label)
+
+	# UPDATE ON GOOGLE PLAY Button
+	_update_now_btn = Button.new()
+	_update_now_btn.name = "UpdateNowBtn"
+	_update_now_btn.text = "UPDATE ON GOOGLE PLAY"
+	_update_now_btn.add_theme_font_size_override("font_size", 15)
+	_update_now_btn.add_theme_color_override("font_color", Color(0.1, 1.0, 0.45))
+	_update_now_btn.add_theme_color_override("font_hover_color", Color(0.5, 1.0, 0.75))
+	_update_now_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+
+	var un_style := _btn_style.duplicate()
+	un_style.bg_color = Color(0.08, 0.28, 0.15, 0.95)
+	un_style.set_border_color(Color(0.25, 1.0, 0.5, 0.95))
+	un_style.set_shadow_color(Color(0.18, 0.95, 0.45, 0.55))
+	un_style.set_shadow_size(12)
+	_update_now_btn.add_theme_stylebox_override("normal", un_style)
+
+	var un_hover := un_style.duplicate()
+	un_hover.bg_color = Color(0.12, 0.38, 0.22, 1.0)
+	un_hover.set_border_color(Color(0.4, 1.0, 0.65, 1.0))
+	un_hover.set_shadow_size(16)
+	_update_now_btn.add_theme_stylebox_override("hover", un_hover)
+	_update_now_btn.add_theme_stylebox_override("pressed", un_hover)
+
+	_update_now_btn.offset_left = 22.0
+	_update_now_btn.offset_right = 318.0
+	_update_now_btn.offset_top = 288.0
+	_update_now_btn.offset_bottom = 344.0
+	_update_now_btn.pressed.connect(_on_update_now_pressed)
+	_update_panel.add_child(_update_now_btn)
+
+	# LATER Button
+	_update_later_btn = Button.new()
+	_update_later_btn.name = "UpdateLaterBtn"
+	_update_later_btn.text = "LATER"
+	_update_later_btn.add_theme_font_size_override("font_size", 14)
+	_update_later_btn.add_theme_color_override("font_color", Color(0.7, 0.7, 0.8))
+	_update_later_btn.add_theme_color_override("font_hover_color", Color(1.0, 1.0, 1.0))
+	_update_later_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+
+	var ul_style := _btn_style.duplicate()
+	ul_style.bg_color = Color(0.14, 0.12, 0.22, 0.85)
+	ul_style.set_border_color(Color(0.35, 0.35, 0.5, 0.6))
+	ul_style.set_shadow_size(6)
+	_update_later_btn.add_theme_stylebox_override("normal", ul_style)
+
+	var ul_hover := ul_style.duplicate()
+	ul_hover.bg_color = Color(0.2, 0.18, 0.3, 0.95)
+	ul_hover.set_border_color(Color(0.5, 0.5, 0.7, 0.9))
+	_update_later_btn.add_theme_stylebox_override("hover", ul_hover)
+	_update_later_btn.add_theme_stylebox_override("pressed", ul_hover)
+
+	_update_later_btn.offset_left = 22.0
+	_update_later_btn.offset_right = 318.0
+	_update_later_btn.offset_top = 354.0
+	_update_later_btn.offset_bottom = 398.0
+	_update_later_btn.pressed.connect(_on_update_later_pressed)
+	_update_panel.add_child(_update_later_btn)
+
+	# Make version label clickable
+	var ver_label: Label = get_node_or_null("MenuScreen/VersionLabel")
+	if ver_label != null:
+		ver_label.mouse_filter = Control.MOUSE_FILTER_STOP
+		ver_label.gui_input.connect(_on_version_label_gui_input)
+
+
+func _show_update_modal(info: Dictionary) -> void:
+	if _update_modal == null or not is_instance_valid(_update_modal):
+		return
+
+	_pending_update_info = info
+	_has_prompted_update = true
+
+	var remote_version: String = str(info.get("latest_version", "1.0.6"))
+	var remote_notes: String = str(info.get("release_notes", ""))
+	var force_update: bool = bool(info.get("force_update", false))
+
+	if _update_version_badge != null and is_instance_valid(_update_version_badge):
+		_update_version_badge.text = "v%s  ➔  v%s" % [CURRENT_VERSION_NAME, remote_version]
+
+	if _update_notes_label != null and is_instance_valid(_update_notes_label):
+		if not remote_notes.is_empty():
+			_update_notes_label.text = remote_notes
+		else:
+			_update_notes_label.text = "• What's New:\n• Exciting new content and improvements on Google Play!"
+
+	if _update_later_btn != null and is_instance_valid(_update_later_btn):
+		_update_later_btn.visible = not force_update
+
+	_update_modal.visible = true
+	sfx.play("combo")
+	_haptic_celebration()
+
+	# Animated scale punch
+	if _update_panel != null and is_instance_valid(_update_panel):
+		_update_panel.pivot_offset = _update_panel.size / 2.0
+		_update_panel.scale = Vector2(0.8, 0.8)
+		var tw := create_tween()
+		tw.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tw.tween_property(_update_panel, "scale", Vector2.ONE, 0.22)
+
+
+func _hide_update_modal() -> void:
+	sfx.play("tap")
+	_haptic_tap()
+	if _update_modal != null and is_instance_valid(_update_modal):
+		_update_modal.visible = false
+
+
+func _on_update_now_pressed() -> void:
+	sfx.play("tap")
+	_haptic_tap()
+	if has_node("/root/UpdateManager"):
+		get_node("/root/UpdateManager").open_store_page()
+	else:
+		OS.shell_open("https://play.google.com/store/apps/details?id=com.psygames.musicsquare")
+
+
+func _on_update_later_pressed() -> void:
+	_hide_update_modal()
+
+
+func _on_update_available(info: Dictionary) -> void:
+	_pending_update_info = info
+	_update_menu_version_badge()
+
+	# Display immediately if on menu and no overlay open
+	if state == settings.GameState.MENU and not _is_overlay_open():
+		_show_update_modal(info)
+
+
+func _update_menu_version_badge() -> void:
+	var ver_label: Label = get_node_or_null("MenuScreen/VersionLabel")
+	if ver_label != null and is_instance_valid(ver_label):
+		ver_label.text = "v%s • UPDATE AVAILABLE" % CURRENT_VERSION_NAME
+		ver_label.add_theme_color_override("font_color", Color(0.25, 1.0, 0.55))
+
+
+func _on_version_label_gui_input(event: InputEvent) -> void:
+	if (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT) \
+		or (event is InputEventScreenTouch and event.pressed):
+		if not _pending_update_info.is_empty():
+			_show_update_modal(_pending_update_info)
+		elif has_node("/root/UpdateManager") and get_node("/root/UpdateManager").is_update_available:
+			_show_update_modal(get_node("/root/UpdateManager").latest_version_info)
+		else:
+			sfx.play("tap")
+			_show_remap_banner("VERSION v%s (UP TO DATE)" % CURRENT_VERSION_NAME)
+
+
+# =====================================================
 # DYNAMIC INTERACTIVE WALKTHROUGH CONTROLLER
 # =====================================================
 
@@ -3528,6 +3825,8 @@ func _apply_lives_bezel() -> void:
 
 func _show_menu() -> void:
 	_set_state(settings.GameState.MENU)
+	if not _pending_update_info.is_empty() and not _has_prompted_update and not _is_overlay_open():
+		_show_update_modal(_pending_update_info)
 
 
 func _start_game() -> void:

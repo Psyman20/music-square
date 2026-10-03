@@ -1,0 +1,527 @@
+[gd_scene format=3 uid="uid://pl1920landscape01"]
+
+[ext_resource type="Script" path="res://promo_director.gd" id="1_director"]
+[ext_resource type="PackedScene" uid="uid://bdtvy1winsayt" path="res://main.tscn" id="2_main"]
+[ext_resource type="Script" path="res://promo_equalizer.gd" id="3_equalizer"]
+[ext_resource type="Texture2D" path="res://icon_512.png" id="4_icon"]
+[ext_resource type="FontFile" path="res://fonts/Orbitron.ttf" id="5_font"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_bezel"]
+bg_color = Color(0.045, 0.05, 0.09, 1)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0, 0.94, 1, 0.8)
+corner_radius_top_left = 28
+corner_radius_top_right = 28
+corner_radius_bottom_right = 28
+corner_radius_bottom_left = 28
+shadow_color = Color(0, 0.8, 1, 0.25)
+shadow_size = 24
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_feature"]
+bg_color = Color(0.07, 0.08, 0.15, 0.92)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(1, 0, 0.5, 0.8)
+corner_radius_top_left = 16
+corner_radius_top_right = 16
+corner_radius_bottom_right = 16
+corner_radius_bottom_left = 16
+shadow_color = Color(1, 0, 0.5, 0.2)
+shadow_size = 14
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_leaderboard"]
+bg_color = Color(0.06, 0.07, 0.13, 0.94)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(1, 0.9, 0, 0.75)
+corner_radius_top_left = 18
+corner_radius_top_right = 18
+corner_radius_bottom_right = 18
+corner_radius_bottom_left = 18
+shadow_color = Color(1, 0.8, 0, 0.2)
+shadow_size = 16
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_badge"]
+bg_color = Color(0.04, 0.05, 0.1, 0.95)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.25, 0.6, 1, 0.8)
+corner_radius_top_left = 16
+corner_radius_top_right = 16
+corner_radius_bottom_right = 16
+corner_radius_bottom_left = 16
+
+[node name="PromoLandscape" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_director")
+is_landscape = true
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.08, 0.05, 0.14, 1)
+
+[node name="BezelFrame" type="Panel" parent="."]
+layout_mode = 0
+offset_left = 680.0
+offset_top = 50.0
+offset_right = 1240.0
+offset_bottom = 1030.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_bezel")
+
+[node name="SubViewportContainer" type="SubViewportContainer" parent="."]
+layout_mode = 0
+offset_left = 690.0
+offset_top = 60.0
+offset_right = 1230.0
+offset_bottom = 1020.0
+
+[node name="SubViewport" type="SubViewport" parent="SubViewportContainer"]
+handle_input_locally = false
+size = Vector2i(540, 960)
+render_target_update_mode = 4
+
+[node name="Main" parent="SubViewportContainer/SubViewport" instance=ExtResource("2_main")]
+
+[node name="LeftPanel" type="Control" parent="."]
+layout_mode = 0
+offset_left = 60.0
+offset_top = 70.0
+offset_right = 630.0
+offset_bottom = 1010.0
+
+[node name="Icon" type="TextureRect" parent="LeftPanel"]
+layout_mode = 0
+offset_left = 0.0
+offset_top = 10.0
+offset_right = 96.0
+offset_bottom = 106.0
+texture = ExtResource("4_icon")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Title" type="Label" parent="LeftPanel"]
+layout_mode = 0
+offset_left = 115.0
+offset_top = 16.0
+offset_right = 550.0
+offset_bottom = 62.0
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 34
+theme_override_colors/font_color = Color(1, 0.2, 0.65, 1)
+text = "MUSIC SQUARE"
+
+[node name="Genre" type="Label" parent="LeftPanel"]
+layout_mode = 0
+offset_left = 117.0
+offset_top = 66.0
+offset_right = 550.0
+offset_bottom = 96.0
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 16
+theme_override_colors/font_color = Color(0, 0.94, 1, 1)
+text = "RHYTHM REFLEX ARCADE"
+
+[node name="ScoreHeading" type="Label" parent="LeftPanel"]
+layout_mode = 0
+offset_left = 0.0
+offset_top = 160.0
+offset_right = 350.0
+offset_bottom = 185.0
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.65, 0.65, 0.75, 1)
+text = "RUN SCORE"
+
+[node name="ScoreValue" type="Label" parent="LeftPanel"]
+layout_mode = 0
+offset_left = 0.0
+offset_top = 188.0
+offset_right = 450.0
+offset_bottom = 250.0
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 50
+theme_override_colors/font_color = Color(1, 0.9, 0.1, 1)
+text = "0"
+
+[node name="StreakHeading" type="Label" parent="LeftPanel"]
+layout_mode = 0
+offset_left = 0.0
+offset_top = 265.0
+offset_right = 350.0
+offset_bottom = 290.0
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.65, 0.65, 0.75, 1)
+text = "COMBO STREAK"
+
+[node name="StreakValue" type="Label" parent="LeftPanel"]
+layout_mode = 0
+offset_left = 0.0
+offset_top = 292.0
+offset_right = 450.0
+offset_bottom = 345.0
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 36
+theme_override_colors/font_color = Color(0, 0.94, 1, 1)
+text = "x0"
+
+[node name="MultiplierHeading" type="Label" parent="LeftPanel"]
+layout_mode = 0
+offset_left = 0.0
+offset_top = 365.0
+offset_right = 350.0
+offset_bottom = 390.0
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.65, 0.65, 0.75, 1)
+text = "MULTIPLIER BOOST"
+
+[node name="MultiplierValue" type="Label" parent="LeftPanel"]
+layout_mode = 0
+offset_left = 0.0
+offset_top = 392.0
+offset_right = 450.0
+offset_bottom = 445.0
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 36
+theme_override_colors/font_color = Color(1, 0.25, 0.7, 1)
+text = "1X COMBO"
+
+[node name="VisualizerTag" type="Label" parent="LeftPanel"]
+layout_mode = 0
+offset_left = 0.0
+offset_top = 660.0
+offset_right = 450.0
+offset_bottom = 685.0
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0.55, 0.6, 0.75, 1)
+text = "SYNTH BASS AUDIO SPECTRUM"
+
+[node name="Equalizer" type="Control" parent="."]
+layout_mode = 0
+offset_left = 60.0
+offset_top = 760.0
+offset_right = 560.0
+offset_bottom = 850.0
+script = ExtResource("3_equalizer")
+bar_count = 20
+bar_width = 16.0
+bar_gap = 7.0
+max_height = 80.0
+
+[node name="RightPanel" type="Control" parent="."]
+layout_mode = 0
+offset_left = 1290.0
+offset_top = 70.0
+offset_right = 1860.0
+offset_bottom = 1010.0
+
+[node name="FeatureCard" type="Panel" parent="."]
+layout_mode = 0
+offset_left = 1290.0
+offset_top = 100.0
+offset_right = 1860.0
+offset_bottom = 290.0
+pivot_offset = Vector2(285, 95)
+theme_override_styles/panel = SubResource("StyleBoxFlat_feature")
+
+[node name="IconLabel" type="Label" parent="FeatureCard"]
+layout_mode = 0
+offset_left = 22.0
+offset_top = 22.0
+offset_right = 82.0
+offset_bottom = 82.0
+theme_override_font_sizes/font_size = 46
+text = "🎮"
+
+[node name="TitleLabel" type="Label" parent="FeatureCard"]
+layout_mode = 0
+offset_left = 90.0
+offset_top = 22.0
+offset_right = 540.0
+offset_bottom = 62.0
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 23
+theme_override_colors/font_color = Color(1, 0.25, 0.7, 1)
+text = "LIGHTNING REFLEXES"
+
+[node name="DescLabel" type="Label" parent="FeatureCard"]
+layout_mode = 0
+offset_left = 90.0
+offset_top = 70.0
+offset_right = 540.0
+offset_bottom = 165.0
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 17
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+text = "Match the neon target color & swipe before time expires!"
+autowrap_mode = 3
+
+[node name="LeaderboardCard" type="Panel" parent="."]
+layout_mode = 0
+offset_left = 1290.0
+offset_top = 340.0
+offset_right = 1860.0
+offset_bottom = 690.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_leaderboard")
+
+[node name="LBTitle" type="Label" parent="LeaderboardCard"]
+layout_mode = 0
+offset_left = 26.0
+offset_top = 22.0
+offset_right = 530.0
+offset_bottom = 56.0
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 22
+theme_override_colors/font_color = Color(1, 0.9, 0.1, 1)
+text = "🏆 GLOBAL LEADERBOARDS"
+
+[node name="LBSub" type="Label" parent="LeaderboardCard"]
+layout_mode = 0
+offset_left = 26.0
+offset_top = 58.0
+offset_right = 530.0
+offset_bottom = 82.0
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0.65, 0.7, 0.85, 1)
+text = "GOOGLE PLAY GAMES SERVICES"
+
+[node name="Row1" type="Label" parent="LeaderboardCard"]
+layout_mode = 0
+offset_left = 32.0
+offset_top = 104.0
+offset_right = 530.0
+offset_bottom = 138.0
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 20
+theme_override_colors/font_color = Color(1, 0.9, 0.15, 1)
+text = "🥇 #1   PSYMAN            842,500"
+
+[node name="Row2" type="Label" parent="LeaderboardCard"]
+layout_mode = 0
+offset_left = 32.0
+offset_top = 152.0
+offset_right = 530.0
+offset_bottom = 186.0
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 19
+theme_override_colors/font_color = Color(0.9, 0.92, 0.98, 1)
+text = "🥈 #2   CYBER_NINJA       791,200"
+
+[node name="Row3" type="Label" parent="LeaderboardCard"]
+layout_mode = 0
+offset_left = 32.0
+offset_top = 200.0
+offset_right = 530.0
+offset_bottom = 234.0
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 19
+theme_override_colors/font_color = Color(1, 0.6, 0.2, 1)
+text = "🥉 #3   RETRO_KING        684,000"
+
+[node name="Row4" type="Label" parent="LeaderboardCard"]
+layout_mode = 0
+offset_left = 32.0
+offset_top = 248.0
+offset_right = 530.0
+offset_bottom = 282.0
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 19
+theme_override_colors/font_color = Color(0, 0.94, 1, 1)
+text = "⭐ #4   YOU?              CLAIM SPOT"
+
+[node name="LBCallout" type="Label" parent="LeaderboardCard"]
+layout_mode = 0
+offset_left = 32.0
+offset_top = 300.0
+offset_right = 530.0
+offset_bottom = 326.0
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.4, 0.85, 1, 1)
+text = "SYNC YOUR HIGH SCORE WORLDWIDE"
+
+[node name="StoreBadge" type="Panel" parent="."]
+layout_mode = 0
+offset_left = 1290.0
+offset_top = 740.0
+offset_right = 1860.0
+offset_bottom = 870.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_badge")
+
+[node name="BadgeSub" type="Label" parent="StoreBadge"]
+layout_mode = 0
+offset_left = 30.0
+offset_top = 20.0
+offset_right = 500.0
+offset_bottom = 44.0
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0.6, 0.7, 0.85, 1)
+text = "AVAILABLE NOW ON ANDROID"
+
+[node name="BadgeTitle" type="Label" parent="StoreBadge"]
+layout_mode = 0
+offset_left = 30.0
+offset_top = 48.0
+offset_right = 530.0
+offset_bottom = 86.0
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 26
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+text = "GET IT ON GOOGLE PLAY"
+
+[node name="FreeTag" type="Label" parent="StoreBadge"]
+layout_mode = 0
+offset_left = 30.0
+offset_top = 90.0
+offset_right = 500.0
+offset_bottom = 114.0
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.2, 0.95, 0.45, 1)
+text = "100% FREE TO PLAY • NO PAYWALLS"
+
+[node name="IntroOverlay" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="BlackBg" type="ColorRect" parent="IntroOverlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.04, 0.03, 0.08, 0.95)
+
+[node name="IntroBox" type="VBoxContainer" parent="IntroOverlay"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -500.0
+offset_top = -180.0
+offset_right = 500.0
+offset_bottom = 180.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 14
+alignment = 1
+
+[node name="HugeTitle" type="Label" parent="IntroOverlay/IntroBox"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 80
+theme_override_colors/font_color = Color(1, 0.2, 0.65, 1)
+text = "MUSIC SQUARE"
+horizontal_alignment = 1
+
+[node name="SubTitle" type="Label" parent="IntroOverlay/IntroBox"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 28
+theme_override_colors/font_color = Color(0, 0.94, 1, 1)
+text = "THE ULTIMATE RHYTHM REFLEX ARCADE"
+horizontal_alignment = 1
+
+[node name="BeatNotice" type="Label" parent="IntroOverlay/IntroBox"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 20
+theme_override_colors/font_color = Color(1, 0.9, 0.2, 1)
+text = "⚡ GET READY TO SWIPE ⚡"
+horizontal_alignment = 1
+
+[node name="OutroOverlay" type="Control" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="BlackBg" type="ColorRect" parent="OutroOverlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.04, 0.03, 0.08, 0.96)
+
+[node name="OutroBox" type="VBoxContainer" parent="OutroOverlay"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -550.0
+offset_top = -240.0
+offset_right = 550.0
+offset_bottom = 240.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 18
+alignment = 1
+
+[node name="IconOutro" type="TextureRect" parent="OutroOverlay/OutroBox"]
+custom_minimum_size = Vector2(130, 130)
+layout_mode = 2
+size_flags_horizontal = 4
+texture = ExtResource("4_icon")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="TitleOutro" type="Label" parent="OutroOverlay/OutroBox"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 64
+theme_override_colors/font_color = Color(1, 0.2, 0.65, 1)
+text = "MUSIC SQUARE"
+horizontal_alignment = 1
+
+[node name="CallToAction" type="Label" parent="OutroOverlay/OutroBox"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 32
+theme_override_colors/font_color = Color(1, 0.9, 0.1, 1)
+text = "DOWNLOAD NOW ON GOOGLE PLAY"
+horizontal_alignment = 1
+
+[node name="SubCta" type="Label" parent="OutroOverlay/OutroBox"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 20
+theme_override_colors/font_color = Color(0, 0.94, 1, 1)
+text = "PLAY FOR FREE • GLOBAL LEADERBOARDS • SYNTHWAVE"
+horizontal_alignment = 1
