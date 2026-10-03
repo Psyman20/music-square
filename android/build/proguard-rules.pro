@@ -50,3 +50,19 @@
 
 # Keep line numbers and source file names for readable stack traces in crash logs
 -keepattributes SourceFile,LineNumberTable,Signature,InnerClasses,EnclosingMethod,Deprecated
+
+# ==============================================================================
+# Google Play Games Services & Gson
+# ==============================================================================
+-keep class com.jacobibanez.plugin.android.godotplaygameservices.** { *; }
+-keepclassmembers class com.jacobibanez.plugin.android.godotplaygameservices.** { *; }
+-keep class com.google.android.gms.games.** { *; }
+-keep class com.google.android.gms.games.internal.** { *; }
+-keep class com.google.android.gms.auth.** { *; }
+-keepclassmembers class com.google.android.gms.games.** {
+    public protected *;
+}
+-keep class com.google.gson.** { *; }
+-keep class com.google.code.gson.** { *; }
+-dontwarn com.google.android.gms.**
+-dontwarn com.google.code.gson.**

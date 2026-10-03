@@ -88,9 +88,9 @@ anchors_preset = 5
 anchor_left = 0.5
 anchor_right = 0.5
 offset_left = -120.0
-offset_top = 470.0
+offset_top = 460.0
 offset_right = 120.0
-offset_bottom = 530.0
+offset_bottom = 515.0
 grow_horizontal = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_font_sizes/font_size = 28
@@ -489,19 +489,33 @@ theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_font_sizes/font_size = 22
 text = "RETRY"
 
-[node name="ShareScoreBtn" type="Button" parent="GameOverScreen/GameOverPanel" unique_id=314159265]
+[node name="LeaderboardBtn" type="Button" parent="GameOverScreen/GameOverPanel" unique_id=889807136]
 layout_mode = 1
 anchors_preset = 5
 anchor_left = 0.5
 anchor_right = 0.5
 offset_left = -135.0
 offset_top = 404.0
+offset_right = -5.0
+offset_bottom = 454.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(0.2, 0.9, 0.6, 1)
+theme_override_font_sizes/font_size = 18
+text = "RANKS"
+
+[node name="ShareScoreBtn" type="Button" parent="GameOverScreen/GameOverPanel" unique_id=314159265]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = 5.0
+offset_top = 404.0
 offset_right = 135.0
 offset_bottom = 454.0
 grow_horizontal = 2
 theme_override_colors/font_color = Color(0.3, 0.9, 1, 1)
-theme_override_font_sizes/font_size = 20
-text = "SHARE SCORE"
+theme_override_font_sizes/font_size = 18
+text = "SHARE"
 
 [node name="RateAppBtn" type="Button" parent="GameOverScreen/GameOverPanel" unique_id=1847291847]
 layout_mode = 1

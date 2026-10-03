@@ -45,6 +45,7 @@ extends Control
 @onready var stats_label: Label = $GameOverScreen/GameOverPanel/StatsLabel
 @onready var revive_btn: Button = $GameOverScreen/GameOverPanel/ReviveBtn
 @onready var retry_btn: Button = $GameOverScreen/GameOverPanel/RetryBtn
+@onready var leaderboard_btn: Button = $GameOverScreen/GameOverPanel/LeaderboardBtn
 @onready var share_score_btn: Button = $GameOverScreen/GameOverPanel/ShareScoreBtn
 @onready var rate_app_btn: Button = $GameOverScreen/GameOverPanel/RateAppBtn
 @onready var go_menu_btn: Button = $GameOverScreen/GameOverPanel/GameOverMenuBtn
@@ -229,6 +230,9 @@ var _badges_screen: Control
 var _badges_list: VBoxContainer
 var _badges_scroll: ScrollContainer
 
+# --- Leaderboard UI ---
+var _leaderboard_button: Button
+
 
 func _ready() -> void:
 	_init_secure_score()
@@ -276,6 +280,14 @@ func _ready() -> void:
 
 	# Badges / Achievements UI (BADGES button + overlay screen).
 	_setup_badges_ui()
+
+	# Leaderboard UI (LEADERBOARD button on menu).
+	_setup_leaderboard_ui()
+
+	# Sync existing high score to leaderboard if returning player has a previous record
+	if not _tamper_flagged and settings != null and settings.high_score > 0:
+		if has_node("/root/LeaderboardManager"):
+			get_node("/root/LeaderboardManager").submit_score(settings.high_score)
 
 	# Tutorial visual UI setup
 	_setup_tutorial_ui()
@@ -713,7 +725,7 @@ func _apply_panel_styles() -> void:
 
 func _setup_button_styles() -> void:
 	var accent := _theme_accent()
-	var buttons := [start_button, resume_btn, restart_btn, pause_menu_btn, retry_btn, share_score_btn, rate_app_btn, go_menu_btn, pause_button, revive_btn, tutorial_understood_btn]
+	var buttons := [start_button, resume_btn, restart_btn, pause_menu_btn, retry_btn, leaderboard_btn, share_score_btn, rate_app_btn, go_menu_btn, pause_button, revive_btn, tutorial_understood_btn]
 	for btn: Button in buttons:
 		if btn == null or not is_instance_valid(btn):
 			continue
@@ -735,6 +747,8 @@ func _connect_signals() -> void:
 	pause_menu_btn.pressed.connect(_on_go_menu_pressed)
 	revive_btn.pressed.connect(_on_revive_pressed)
 	retry_btn.pressed.connect(_on_retry_pressed)
+	if leaderboard_btn != null:
+		leaderboard_btn.pressed.connect(_on_go_leaderboard_pressed)
 	if share_score_btn != null:
 		share_score_btn.pressed.connect(_on_share_score_pressed)
 	if rate_app_btn != null:
@@ -932,8 +946,8 @@ func _setup_songs_ui() -> void:
 	_songs_button.anchor_right = 0.5
 	_songs_button.offset_left = -120.0
 	_songs_button.offset_right = 120.0
-	_songs_button.offset_top = 545.0
-	_songs_button.offset_bottom = 605.0
+	_songs_button.offset_top = 525.0
+	_songs_button.offset_bottom = 580.0
 	_songs_button.add_theme_font_size_override("font_size", 28)
 	_songs_button.add_theme_color_override("font_color", Color(1, 1, 1, 1))
 	_songs_button.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))
@@ -1184,8 +1198,8 @@ func _setup_themes_ui() -> void:
 	_themes_button.anchor_right = 0.5
 	_themes_button.offset_left = -120.0
 	_themes_button.offset_right = 120.0
-	_themes_button.offset_top = 620.0
-	_themes_button.offset_bottom = 680.0
+	_themes_button.offset_top = 590.0
+	_themes_button.offset_bottom = 645.0
 	_themes_button.add_theme_font_size_override("font_size", 28)
 	_themes_button.add_theme_color_override("font_color", Color(1, 1, 1, 1))
 	_themes_button.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))
@@ -1373,8 +1387,8 @@ func _setup_options_ui() -> void:
 	_options_button.anchor_right = 0.5
 	_options_button.offset_left = -120.0
 	_options_button.offset_right = 120.0
-	_options_button.offset_top = 695.0
-	_options_button.offset_bottom = 755.0
+	_options_button.offset_top = 785.0
+	_options_button.offset_bottom = 840.0
 	_options_button.add_theme_font_size_override("font_size", 28)
 	_options_button.add_theme_color_override("font_color", Color(1, 1, 1, 1))
 	_options_button.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))
@@ -3196,8 +3210,8 @@ func _setup_badges_ui() -> void:
 	_badges_button.anchor_right = 0.5
 	_badges_button.offset_left = -120.0
 	_badges_button.offset_right = 120.0
-	_badges_button.offset_top = 770.0
-	_badges_button.offset_bottom = 830.0
+	_badges_button.offset_top = 655.0
+	_badges_button.offset_bottom = 710.0
 	_badges_button.add_theme_font_size_override("font_size", 28)
 	_badges_button.add_theme_color_override("font_color", Color(1, 1, 1, 1))
 	_badges_button.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))
@@ -3428,6 +3442,54 @@ func _build_badge_card(ach: Dictionary) -> Panel:
 
 	return card
 
+
+# =====================================================
+# LEADERBOARD UI
+# =====================================================
+
+func _setup_leaderboard_ui() -> void:
+	# --- "LEADERBOARD" button on the menu screen ---
+	_leaderboard_button = Button.new()
+	_leaderboard_button.name = "LeaderboardButton"
+	_leaderboard_button.text = "LEADERBOARD"
+	_leaderboard_button.flat = true
+	_leaderboard_button.anchor_left = 0.5
+	_leaderboard_button.anchor_right = 0.5
+	_leaderboard_button.offset_left = -120.0
+	_leaderboard_button.offset_right = 120.0
+	_leaderboard_button.offset_top = 720.0
+	_leaderboard_button.offset_bottom = 775.0
+	_leaderboard_button.add_theme_font_size_override("font_size", 24)
+	_leaderboard_button.add_theme_color_override("font_color", Color(1, 1, 1, 1))
+	_leaderboard_button.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))
+	_leaderboard_button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	_leaderboard_button.pressed.connect(_on_leaderboard_pressed)
+
+	var lb_bg := ColorRect.new()
+	lb_bg.name = "LeaderboardButtonBg"
+	lb_bg.anchor_right = 1.0
+	lb_bg.anchor_bottom = 1.0
+	lb_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lb_bg.color = Color(0.18, 0.80, 0.44, 0.22)
+	_leaderboard_button.add_child(lb_bg)
+	_leaderboard_button.move_child(lb_bg, 0)
+	menu_screen.add_child(_leaderboard_button)
+
+
+func _on_leaderboard_pressed() -> void:
+	sfx.play("tap")
+	_haptic_tap()
+	if has_node("/root/LeaderboardManager"):
+		get_node("/root/LeaderboardManager").show_leaderboard()
+
+
+func _on_go_leaderboard_pressed() -> void:
+	sfx.play("tap")
+	_haptic_tap()
+	if has_node("/root/LeaderboardManager"):
+		get_node("/root/LeaderboardManager").show_leaderboard()
+
+
 func _select_theme(theme_id: String) -> void:
 	settings.selected_theme = theme_id
 	settings.save_data()
@@ -3546,6 +3608,8 @@ func _game_over() -> void:
 	# Check achievements (only on legitimate, non-tampered runs)
 	if not _tamper_flagged:
 		_check_achievements(accuracy)
+		if score > 0 and has_node("/root/LeaderboardManager"):
+			get_node("/root/LeaderboardManager").submit_score(score)
 
 
 func _restart_game() -> void:
