@@ -53,8 +53,8 @@ extends Control
 # --- Tutorial Nodes ---
 @onready var tutorial_understood_btn: Button = $TutorialScreen/TutorialPanel/TutorialUnderstoodBtn
 
-const CURRENT_VERSION_NAME: String = "1.0.6"
-const CURRENT_VERSION_CODE: int = 7
+const CURRENT_VERSION_NAME: String = "1.1.0"
+const CURRENT_VERSION_CODE: int = 8
 
 # --- Game State ---
 var state: GameSettings.GameState = GameSettings.GameState.MENU
@@ -3956,10 +3956,10 @@ func _setup_update_ui() -> void:
 	title_lbl.offset_bottom = 48.0
 	_update_panel.add_child(title_lbl)
 
-	# Version Badge: v1.0.5 -> v1.0.6
+	# Version Badge
 	_update_version_badge = Label.new()
 	_update_version_badge.name = "UpdateVersionBadge"
-	_update_version_badge.text = "v1.0.5  ➔  v1.0.6"
+	_update_version_badge.text = "v1.1.0  ➔  v1.1.1"
 	_update_version_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_update_version_badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_update_version_badge.add_theme_font_size_override("font_size", 15)
