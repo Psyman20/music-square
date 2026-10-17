@@ -237,23 +237,28 @@ var _badges_scroll: ScrollContainer
 # --- Leaderboard UI ---
 var _leaderboard_button: Button
 
-# --- Neon Sparks & Cosmetic Shop UI ---
+# --- Neon Sparks & Cosmetic Shop / Daily Missions UI ---
 var _shop_button: Button
 var _menu_sparks_btn: Button
 var _menu_sparks_label: Label
 var _shop_screen: Control
+var _shop_title_label: Label
 var _shop_sparks_icon: Control
 var _shop_sparks_label: Label
 var _shop_tab_buttons: Dictionary = {}
-var _shop_active_tab: String = "trail"
+var _shop_active_tab: String = "missions"
 var _shop_scroll: ScrollContainer
 var _shop_list: VBoxContainer
 var _overlay_drag_is_shop: bool = false
 var _shop_scrollbar_dragging: bool = false
 var _overlay_drag_start_x: float = 0.0
-var _sparks_awarded_this_run: int = 0
-var _last_earned_sparks_this_gameover: int = 0
-var _has_doubled_sparks_this_game: bool = false
+var _mission_run_credited_score: int = 0
+var _mission_run_credited_swipes: int = 0
+var _mission_run_credited_frenzies: int = 0
+var _mission_run_credited_holds: int = 0
+var _mission_run_credited_fast: int = 0
+var _mission_run_game_counted: bool = false
+var _bonus_mission_ad_loading: bool = false
 var _go_sparks_label: Label
 var _go_double_sparks_btn: Button
 var _go_shop_btn: Button
@@ -922,9 +927,12 @@ func _setup_initial_game_state() -> void:
 	_last_displayed_lives = settings.MAX_LIVES
 	_has_revived_this_game = false
 	_revive_ready_to_resume = false
-	_sparks_awarded_this_run = 0
-	_last_earned_sparks_this_gameover = 0
-	_has_doubled_sparks_this_game = false
+	_mission_run_credited_score = 0
+	_mission_run_credited_swipes = 0
+	_mission_run_credited_frenzies = 0
+	_mission_run_credited_holds = 0
+	_mission_run_credited_fast = 0
+	_mission_run_game_counted = false
 	streak = 0
 	best_streak_this_game = 0
 	total_correct = 0
@@ -1679,15 +1687,15 @@ func _layout_menu_buttons() -> void:
 
 
 func _setup_shop_ui() -> void:
-	# 1. Top Sparks Balance Pill on MenuScreen (fixed 240px width matching menu buttons, clip_contents = true)
+	# 1. Top Sparks & Daily Missions Pill on MenuScreen (fixed 280px width, clip_contents = true)
 	_menu_sparks_btn = Button.new()
 	_menu_sparks_btn.name = "MenuSparksPill"
 	_menu_sparks_btn.text = ""
 	_menu_sparks_btn.clip_contents = true
 	_menu_sparks_btn.anchor_left = 0.5
 	_menu_sparks_btn.anchor_right = 0.5
-	_menu_sparks_btn.offset_left = -120.0
-	_menu_sparks_btn.offset_right = 120.0
+	_menu_sparks_btn.offset_left = -140.0
+	_menu_sparks_btn.offset_right = 140.0
 	_menu_sparks_btn.offset_top = 410.0
 	_menu_sparks_btn.offset_bottom = 446.0
 	_menu_sparks_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
@@ -1704,7 +1712,7 @@ func _setup_shop_ui() -> void:
 	pill_hover.set_shadow_size(12)
 	_menu_sparks_btn.add_theme_stylebox_override("hover", pill_hover)
 	_menu_sparks_btn.add_theme_stylebox_override("pressed", pill_hover)
-	_menu_sparks_btn.pressed.connect(_open_shop_screen)
+	_menu_sparks_btn.pressed.connect(_open_missions_screen)
 
 	var pill_hbox := HBoxContainer.new()
 	pill_hbox.name = "PillContent"
@@ -1723,7 +1731,7 @@ func _setup_shop_ui() -> void:
 	_menu_sparks_label.name = "MenuSparksLabel"
 	_menu_sparks_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_menu_sparks_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_menu_sparks_label.add_theme_font_size_override("font_size", 14)
+	_menu_sparks_label.add_theme_font_size_override("font_size", 12)
 	_menu_sparks_label.add_theme_color_override("font_color", Color(1.0, 0.92, 0.28))
 	_menu_sparks_label.add_theme_color_override("font_outline_color", Color(0.06, 0.03, 0.14, 1.0))
 	_menu_sparks_label.add_theme_constant_override("outline_size", 4)
@@ -1747,7 +1755,7 @@ func _setup_shop_ui() -> void:
 	_shop_button.add_theme_color_override("font_color", Color(1.0, 0.95, 0.45, 1.0))
 	_shop_button.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))
 	_shop_button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-	_shop_button.pressed.connect(_open_shop_screen)
+	_shop_button.pressed.connect(_open_shop_cosmetics_screen)
 	var shop_bg := ColorRect.new()
 	shop_bg.name = "ShopButtonBg"
 	shop_bg.anchor_right = 1.0
@@ -1758,7 +1766,7 @@ func _setup_shop_ui() -> void:
 	_shop_button.move_child(shop_bg, 0)
 	menu_screen.add_child(_shop_button)
 
-	# 3. Shop overlay screen (matches exact 440px width of Songs/Themes/Badges panels)
+	# 3. Shop & Daily Missions overlay screen (matches exact 440px width of Songs/Themes/Badges panels)
 	_shop_screen = Control.new()
 	_shop_screen.name = "ShopScreen"
 	_shop_screen.visible = false
@@ -1790,21 +1798,21 @@ func _setup_shop_ui() -> void:
 	panel.gui_input.connect(_on_shop_panel_input)
 	_shop_screen.add_child(panel)
 
-	var title := Label.new()
-	title.name = "Title"
-	title.text = "NEON SHOP"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 32)
-	title.add_theme_color_override("font_color", Color(1.0, 0.90, 0.28))
-	title.add_theme_color_override("font_outline_color", Color(0.12, 0.06, 0.22, 1.0))
-	title.add_theme_constant_override("outline_size", 8)
-	title.anchor_left = 0.5
-	title.anchor_right = 0.5
-	title.offset_left = -190.0
-	title.offset_right = 190.0
-	title.offset_top = 16.0
-	title.offset_bottom = 54.0
-	panel.add_child(title)
+	_shop_title_label = Label.new()
+	_shop_title_label.name = "Title"
+	_shop_title_label.text = "NEON SHOP"
+	_shop_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_shop_title_label.add_theme_font_size_override("font_size", 28)
+	_shop_title_label.add_theme_color_override("font_color", Color(1.0, 0.90, 0.28))
+	_shop_title_label.add_theme_color_override("font_outline_color", Color(0.12, 0.06, 0.22, 1.0))
+	_shop_title_label.add_theme_constant_override("outline_size", 8)
+	_shop_title_label.anchor_left = 0.5
+	_shop_title_label.anchor_right = 0.5
+	_shop_title_label.offset_left = -196.0
+	_shop_title_label.offset_right = 196.0
+	_shop_title_label.offset_top = 16.0
+	_shop_title_label.offset_bottom = 54.0
+	panel.add_child(_shop_title_label)
 
 	var bal_hbox := HBoxContainer.new()
 	bal_hbox.name = "BalanceRow"
@@ -1831,7 +1839,7 @@ func _setup_shop_ui() -> void:
 	_shop_sparks_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bal_hbox.add_child(_shop_sparks_label)
 
-	# Category Tabs: TRAILS | SKINS | SOUNDS
+	# Category Tabs: MISSIONS | TRAILS | SKINS | SOUNDS
 	var tabs_hbox := HBoxContainer.new()
 	tabs_hbox.name = "CategoryTabs"
 	tabs_hbox.anchor_left = 0.5
@@ -1840,23 +1848,25 @@ func _setup_shop_ui() -> void:
 	tabs_hbox.offset_right = 194.0
 	tabs_hbox.offset_top = 88.0
 	tabs_hbox.offset_bottom = 130.0
-	tabs_hbox.add_theme_constant_override("separation", 8)
+	tabs_hbox.add_theme_constant_override("separation", 6)
 	tabs_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	panel.add_child(tabs_hbox)
 
 	var tab_defs := [
-		{"id": "trail", "label": "TRAILS"},
-		{"id": "skin",  "label": "SKINS"},
-		{"id": "sfx",   "label": "SOUNDS"},
+		{"id": "missions", "label": "MISSIONS"},
+		{"id": "trail",    "label": "TRAILS"},
+		{"id": "skin",     "label": "SKINS"},
+		{"id": "sfx",      "label": "SOUNDS"},
 	]
 	for t_def: Dictionary in tab_defs:
 		var t_id: String = str(t_def["id"])
 		var t_btn := Button.new()
 		t_btn.name = "Tab_" + t_id
 		t_btn.text = str(t_def["label"])
+		t_btn.clip_text = true
 		t_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		t_btn.custom_minimum_size = Vector2(0, 40)
-		t_btn.add_theme_font_size_override("font_size", 14)
+		t_btn.add_theme_font_size_override("font_size", 11)
 		t_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 		t_btn.pressed.connect(_on_shop_tab_selected.bind(t_id))
 		tabs_hbox.add_child(t_btn)
@@ -1929,7 +1939,7 @@ func _setup_shop_ui() -> void:
 	close_btn.pressed.connect(_close_shop_screen)
 	panel.add_child(close_btn)
 
-	# 4. Game Over Panel Sparks & Shop Controls
+	# 4. Game Over Panel Sparks & Missions/Shop Controls
 	_setup_gameover_sparks_ui()
 	_update_sparks_displays()
 
@@ -1939,7 +1949,7 @@ func _setup_gameover_sparks_ui() -> void:
 	if go_panel == null:
 		return
 
-	# Expand GameOverPanel slightly to house the Sparks reward banner & 2X/Shop buttons
+	# Expand GameOverPanel slightly to house the Daily Missions status row & Missions/Shop buttons
 	go_panel.offset_top = -332.0
 	go_panel.offset_bottom = 332.0
 
@@ -1960,7 +1970,7 @@ func _setup_gameover_sparks_ui() -> void:
 		stats_label.offset_top = 164.0
 		stats_label.offset_bottom = 242.0
 
-	# Glowing Neon Sparks Earned Row on Game Over (with procedural vector Spark icon)
+	# Glowing Neon Sparks & Daily Missions Status Row on Game Over
 	var go_sparks_hbox := HBoxContainer.new()
 	go_sparks_hbox.name = "GameOverSparksRow"
 	go_sparks_hbox.anchor_right = 1.0
@@ -1979,21 +1989,21 @@ func _setup_gameover_sparks_ui() -> void:
 	_go_sparks_label.name = "GameOverSparksLabel"
 	_go_sparks_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_go_sparks_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_go_sparks_label.add_theme_font_size_override("font_size", 12)
+	_go_sparks_label.add_theme_font_size_override("font_size", 11)
 	_go_sparks_label.add_theme_color_override("font_color", Color(1.0, 0.90, 0.25))
 	_go_sparks_label.add_theme_color_override("font_outline_color", Color(0.08, 0.04, 0.16, 1.0))
 	_go_sparks_label.add_theme_constant_override("outline_size", 5)
-	_go_sparks_label.text = "+0 SPARKS  |  TOTAL: 0"
+	_go_sparks_label.text = "MISSIONS: 0/3 DONE  |  SPARKS: 0"
 	go_sparks_hbox.add_child(_go_sparks_label)
 
 	if revive_btn != null:
 		revive_btn.offset_top = 282.0
 		revive_btn.offset_bottom = 330.0
 
-	# "2X SPARKS (AD)" button (left side)
+	# "MISSIONS" button (left side)
 	_go_double_sparks_btn = Button.new()
-	_go_double_sparks_btn.name = "DoubleSparksBtn"
-	_go_double_sparks_btn.text = "   2X SPARKS"
+	_go_double_sparks_btn.name = "GameOverMissionsBtn"
+	_go_double_sparks_btn.text = "   MISSIONS"
 	_go_double_sparks_btn.clip_contents = true
 	_go_double_sparks_btn.anchor_left = 0.5
 	_go_double_sparks_btn.anchor_right = 0.5
@@ -2001,14 +2011,14 @@ func _setup_gameover_sparks_ui() -> void:
 	_go_double_sparks_btn.offset_right = -4.0
 	_go_double_sparks_btn.offset_top = 338.0
 	_go_double_sparks_btn.offset_bottom = 384.0
-	_go_double_sparks_btn.add_theme_font_size_override("font_size", 12)
+	_go_double_sparks_btn.add_theme_font_size_override("font_size", 11)
 	_go_double_sparks_btn.add_theme_color_override("font_color", Color(1.0, 0.92, 0.28))
 	_go_double_sparks_btn.add_theme_color_override("font_hover_color", Color(1.0, 1.0, 0.65))
 	_go_double_sparks_btn.add_theme_stylebox_override("normal", _btn_style)
 	_go_double_sparks_btn.add_theme_stylebox_override("hover", _btn_style)
 	_go_double_sparks_btn.add_theme_stylebox_override("pressed", _btn_style)
 	_go_double_sparks_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-	_go_double_sparks_btn.pressed.connect(_on_double_sparks_pressed)
+	_go_double_sparks_btn.pressed.connect(_open_missions_screen)
 	var dbl_icon := _create_spark_icon(15.0, Color(1.0, 0.92, 0.25))
 	dbl_icon.position = Vector2(10.0, 15.0)
 	_go_double_sparks_btn.add_child(dbl_icon)
@@ -2025,14 +2035,14 @@ func _setup_gameover_sparks_ui() -> void:
 	_go_shop_btn.offset_right = 135.0
 	_go_shop_btn.offset_top = 338.0
 	_go_shop_btn.offset_bottom = 384.0
-	_go_shop_btn.add_theme_font_size_override("font_size", 12)
+	_go_shop_btn.add_theme_font_size_override("font_size", 11)
 	_go_shop_btn.add_theme_color_override("font_color", Color(0.25, 0.95, 1.0))
 	_go_shop_btn.add_theme_color_override("font_hover_color", Color(0.65, 1.0, 1.0))
 	_go_shop_btn.add_theme_stylebox_override("normal", _btn_style)
 	_go_shop_btn.add_theme_stylebox_override("hover", _btn_style)
 	_go_shop_btn.add_theme_stylebox_override("pressed", _btn_style)
 	_go_shop_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-	_go_shop_btn.pressed.connect(_open_shop_screen)
+	_go_shop_btn.pressed.connect(_open_shop_cosmetics_screen)
 	var shop_go_icon := _create_spark_icon(15.0, Color(0.25, 0.95, 1.0))
 	shop_go_icon.position = Vector2(10.0, 15.0)
 	_go_shop_btn.add_child(shop_go_icon)
@@ -2058,14 +2068,17 @@ func _setup_gameover_sparks_ui() -> void:
 func _update_sparks_displays() -> void:
 	var sp_compact := _format_sparks_compact(settings.sparks)
 	var sp_full := _format_number_with_commas(settings.sparks)
+	var m_sum: Dictionary = settings.get_daily_missions_summary()
+	var m_done: int = int(m_sum.get("done", 0))
+	var m_total: int = int(m_sum.get("total", 3))
 	if _menu_sparks_label != null and is_instance_valid(_menu_sparks_label):
-		var pill_txt := sp_compact + " SPARKS  |  SHOP"
+		var pill_txt := sp_compact + "  |  MISSIONS " + str(m_done) + "/" + str(m_total)
 		_menu_sparks_label.text = pill_txt
-		var f_size := 13
-		if pill_txt.length() > 18:
+		var f_size := 12
+		if pill_txt.length() > 21:
+			f_size = 10
+		elif pill_txt.length() > 18:
 			f_size = 11
-		elif pill_txt.length() > 15:
-			f_size = 12
 		_menu_sparks_label.add_theme_font_size_override("font_size", f_size)
 	if _shop_sparks_icon != null and is_instance_valid(_shop_sparks_icon):
 		_shop_sparks_icon.visible = true
@@ -2119,7 +2132,7 @@ func _set_shop_scroll_from_bar_y(global_y: float) -> void:
 
 
 func _cycle_shop_tab(dir_step: int) -> void:
-	var order := ["trail", "skin", "sfx"]
+	var order := ["missions", "trail", "skin", "sfx"]
 	var idx := order.find(_shop_active_tab)
 	if idx == -1:
 		idx = 0
@@ -2234,6 +2247,21 @@ func _handle_shop_touch_scroll(event: InputEvent) -> void:
 					get_viewport().set_input_as_handled()
 
 
+func _open_missions_screen() -> void:
+	_shop_active_tab = "missions"
+	if _shop_scroll != null:
+		_shop_scroll.scroll_vertical = 0
+	_open_shop_screen()
+
+
+func _open_shop_cosmetics_screen() -> void:
+	if _shop_active_tab == "missions":
+		_shop_active_tab = "trail"
+	if _shop_scroll != null:
+		_shop_scroll.scroll_vertical = 0
+	_open_shop_screen()
+
+
 func _open_shop_screen() -> void:
 	_overlay_drag_active = false
 	_shop_scrollbar_dragging = false
@@ -2265,7 +2293,11 @@ func _on_shop_tab_selected(tab_id: String) -> void:
 
 
 func _refresh_shop_screen() -> void:
+	settings.check_and_refresh_daily_missions()
 	_update_sparks_displays()
+
+	if _shop_title_label != null and is_instance_valid(_shop_title_label):
+		_shop_title_label.text = "DAILY MISSIONS" if _shop_active_tab == "missions" else "NEON SHOP"
 
 	# Style category tabs
 	for t_id: String in _shop_tab_buttons:
@@ -2297,23 +2329,333 @@ func _refresh_shop_screen() -> void:
 		_shop_list.remove_child(child)
 		child.queue_free()
 
-	var items: Array = []
-	match _shop_active_tab:
-		"trail":
-			items = settings.SWIPE_TRAILS
-		"skin":
-			items = settings.SQUARE_SKINS
-		"sfx":
-			items = settings.SOUND_PACKS
+	if _shop_active_tab == "missions":
+		var info_lbl := Label.new()
+		info_lbl.name = "MissionsSubtitle"
+		var m_sum: Dictionary = settings.get_daily_missions_summary()
+		var m_done: int = int(m_sum.get("done", 0))
+		var m_total: int = int(m_sum.get("total", 3))
+		info_lbl.text = "COMPLETE DAILY QUESTS FOR SPARKS  (" + str(m_done) + "/" + str(m_total) + " DONE)"
+		info_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		info_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		info_lbl.custom_minimum_size = Vector2(0, 20)
+		info_lbl.clip_text = true
+		info_lbl.add_theme_font_size_override("font_size", 10)
+		info_lbl.add_theme_color_override("font_color", Color(0.75, 0.92, 1.0))
+		info_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_shop_list.add_child(info_lbl)
 
-	for item_def: Dictionary in items:
-		_shop_list.add_child(_build_shop_row(_shop_active_tab, item_def))
+		for slot_idx in range(mini(4, settings.daily_mission_ids.size())):
+			var q_id := str(settings.daily_mission_ids[slot_idx])
+			_shop_list.add_child(_build_mission_row(slot_idx, q_id, slot_idx == 3))
+	else:
+		var items: Array = []
+		match _shop_active_tab:
+			"trail":
+				items = settings.SWIPE_TRAILS
+			"skin":
+				items = settings.SQUARE_SKINS
+			"sfx":
+				items = settings.SOUND_PACKS
+
+		for item_def: Dictionary in items:
+			_shop_list.add_child(_build_shop_row(_shop_active_tab, item_def))
 
 	# Bottom padding spacer so the last card scrolls cleanly with room to spare
 	var bottom_pad := Control.new()
 	bottom_pad.custom_minimum_size = Vector2(0, 14)
 	bottom_pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_shop_list.add_child(bottom_pad)
+
+
+func _build_mission_row(slot_idx: int, q_id: String, is_bonus_slot: bool) -> Button:
+	var q_def: Dictionary = settings.get_quest_by_id(q_id)
+	var q_name: String = str(q_def.get("name", "DAILY QUEST"))
+	var q_desc: String = str(q_def.get("desc", ""))
+	var target: int = maxi(1, int(q_def.get("target", 1)))
+	var reward: int = int(q_def.get("reward", 100))
+	var q_col: Color = q_def.get("color", Color(0.25, 0.95, 1.0))
+	var q_icon: String = str(q_def.get("icon", "bolt"))
+
+	var btn := Button.new()
+	btn.name = "MissionSlot_" + str(slot_idx)
+	btn.text = ""
+	btn.clip_contents = true
+	btn.mouse_filter = Control.MOUSE_FILTER_PASS
+	btn.custom_minimum_size = Vector2(0, 92)
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+
+	# Case 1: 4th Bonus Daily Mission locked behind a Rewarded Ad
+	if is_bonus_slot and not settings.daily_bonus_ad_unlocked:
+		var locked_style := _btn_style.duplicate()
+		locked_style.bg_color = Color(0.17, 0.10, 0.28, 0.94)
+		locked_style.set_border_width_all(2)
+		locked_style.set_border_color(Color(1.0, 0.82, 0.22, 0.92))
+		locked_style.set_shadow_color(Color(1.0, 0.72, 0.12, 0.38))
+		locked_style.set_shadow_size(8)
+		btn.add_theme_stylebox_override("normal", locked_style)
+		var l_hover := locked_style.duplicate()
+		l_hover.set_border_color(Color(1.0, 0.95, 0.55, 1.0))
+		btn.add_theme_stylebox_override("hover", l_hover)
+		btn.add_theme_stylebox_override("pressed", l_hover)
+		btn.pressed.connect(_on_unlock_bonus_mission_pressed)
+
+		var bonus_icon_panel := Panel.new()
+		bonus_icon_panel.name = "BonusIcon"
+		bonus_icon_panel.position = Vector2(12.0, 25.0)
+		bonus_icon_panel.size = Vector2(42.0, 42.0)
+		bonus_icon_panel.custom_minimum_size = Vector2(42.0, 42.0)
+		bonus_icon_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		bonus_icon_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+		bonus_icon_panel.draw.connect(func():
+			bonus_icon_panel.draw_circle(Vector2(21.0, 21.0), 19.0, Color(0.07, 0.04, 0.15, 0.90))
+			bonus_icon_panel.draw_arc(Vector2(21.0, 21.0), 19.0, 0.0, TAU, 28, Color(1.0, 0.85, 0.25, 0.75), 1.8, true)
+			_draw_badge_icon(bonus_icon_panel, "star", Color(1.0, 0.88, 0.25))
+		)
+		btn.add_child(bonus_icon_panel)
+
+		var b_title := Label.new()
+		b_title.name = "BonusTitle"
+		b_title.text = "EXTRA DAILY MISSION"
+		b_title.anchor_right = 1.0
+		b_title.offset_left = 64.0
+		b_title.offset_right = -114.0
+		b_title.offset_top = 8.0
+		b_title.offset_bottom = 30.0
+		b_title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		b_title.clip_text = true
+		b_title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		b_title.add_theme_font_size_override("font_size", 13)
+		b_title.add_theme_color_override("font_color", Color(1.0, 0.92, 0.30))
+		b_title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		btn.add_child(b_title)
+
+		var b_rew_hbox := HBoxContainer.new()
+		b_rew_hbox.name = "BonusRewardBox"
+		b_rew_hbox.anchor_left = 1.0
+		b_rew_hbox.anchor_right = 1.0
+		b_rew_hbox.offset_left = -112.0
+		b_rew_hbox.offset_right = -12.0
+		b_rew_hbox.offset_top = 8.0
+		b_rew_hbox.offset_bottom = 30.0
+		b_rew_hbox.alignment = BoxContainer.ALIGNMENT_END
+		b_rew_hbox.add_theme_constant_override("separation", 4)
+		b_rew_hbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		btn.add_child(b_rew_hbox)
+
+		b_rew_hbox.add_child(_create_spark_icon(15.0, Color(1.0, 0.92, 0.25)))
+		var b_rew_lbl := Label.new()
+		b_rew_lbl.text = "+" + str(reward)
+		b_rew_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		b_rew_lbl.add_theme_font_size_override("font_size", 13)
+		b_rew_lbl.add_theme_color_override("font_color", Color(1.0, 0.92, 0.28))
+		b_rew_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		b_rew_hbox.add_child(b_rew_lbl)
+
+		var b_desc := Label.new()
+		b_desc.name = "BonusDesc"
+		b_desc.text = "Watch a short ad to unlock 1 extra Daily Mission today!"
+		b_desc.anchor_right = 1.0
+		b_desc.offset_left = 64.0
+		b_desc.offset_right = -12.0
+		b_desc.offset_top = 31.0
+		b_desc.offset_bottom = 59.0
+		b_desc.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+		b_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		b_desc.clip_text = true
+		b_desc.add_theme_font_size_override("font_size", 10)
+		b_desc.add_theme_color_override("font_color", Color(0.88, 0.84, 0.96))
+		b_desc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		btn.add_child(b_desc)
+
+		var cta_lbl := Label.new()
+		cta_lbl.name = "WatchAdCta"
+		cta_lbl.text = "LOADING AD..." if _bonus_mission_ad_loading else "[ WATCH AD TO UNLOCK MISSION ]"
+		cta_lbl.anchor_right = 1.0
+		cta_lbl.offset_left = 64.0
+		cta_lbl.offset_right = -12.0
+		cta_lbl.offset_top = 62.0
+		cta_lbl.offset_bottom = 84.0
+		cta_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		cta_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		cta_lbl.clip_text = true
+		cta_lbl.add_theme_font_size_override("font_size", 11)
+		cta_lbl.add_theme_color_override("font_color", Color(0.30, 0.98, 1.0))
+		cta_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		btn.add_child(cta_lbl)
+
+		return btn
+
+	# Case 2: Active or Completed Daily Mission
+	var completed: bool = settings.is_daily_mission_completed(q_id)
+	var cur: int = target if completed else mini(target, settings.get_daily_mission_progress(q_id))
+
+	var row_style := _btn_style.duplicate()
+	var title_col := Color(0.95, 0.98, 1.0)
+	var desc_col := Color(0.78, 0.82, 0.92)
+	var accent_col: Color = Color(0.30, 1.0, 0.55) if completed else q_col
+
+	if completed:
+		title_col = Color(0.35, 1.0, 0.60)
+		desc_col = Color(0.72, 0.92, 0.80)
+		row_style.bg_color = Color(0.07, 0.19, 0.14, 0.92)
+		row_style.set_border_width_all(2)
+		row_style.set_border_color(Color(0.25, 1.0, 0.55, 0.90))
+		row_style.set_shadow_color(Color(0.15, 0.90, 0.45, 0.30))
+		row_style.set_shadow_size(6)
+	else:
+		row_style.bg_color = Color(0.11, 0.09, 0.22, 0.92)
+		row_style.set_border_width_all(2)
+		row_style.set_border_color(Color(q_col.r, q_col.g, q_col.b, 0.78))
+
+	btn.add_theme_stylebox_override("normal", row_style)
+	btn.add_theme_stylebox_override("hover", row_style)
+	btn.add_theme_stylebox_override("pressed", row_style)
+
+	# 1. Left Quest Icon (42x42)
+	var q_icon_panel := Panel.new()
+	q_icon_panel.name = "QuestIcon"
+	q_icon_panel.position = Vector2(12.0, 25.0)
+	q_icon_panel.size = Vector2(42.0, 42.0)
+	q_icon_panel.custom_minimum_size = Vector2(42.0, 42.0)
+	q_icon_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	q_icon_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	q_icon_panel.draw.connect(func():
+		q_icon_panel.draw_circle(Vector2(21.0, 21.0), 19.0, Color(0.06, 0.04, 0.14, 0.88))
+		q_icon_panel.draw_arc(Vector2(21.0, 21.0), 19.0, 0.0, TAU, 28, Color(accent_col.r, accent_col.g, accent_col.b, 0.70), 1.8, true)
+		_draw_badge_icon(q_icon_panel, q_icon, accent_col)
+	)
+	btn.add_child(q_icon_panel)
+
+	# 2. Quest Name Label (top-left, clipped cleanly)
+	var name_lbl := Label.new()
+	name_lbl.name = "QuestName"
+	name_lbl.text = ("BONUS: " + q_name) if is_bonus_slot else q_name
+	name_lbl.anchor_right = 1.0
+	name_lbl.offset_left = 64.0
+	name_lbl.offset_right = -114.0
+	name_lbl.offset_top = 8.0
+	name_lbl.offset_bottom = 30.0
+	name_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	name_lbl.clip_text = true
+	name_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	name_lbl.add_theme_font_size_override("font_size", 13)
+	name_lbl.add_theme_color_override("font_color", title_col)
+	name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	btn.add_child(name_lbl)
+
+	# 3. Top-Right Reward Badge (with procedural vector Spark icon)
+	var rew_hbox := HBoxContainer.new()
+	rew_hbox.name = "RewardBox"
+	rew_hbox.anchor_left = 1.0
+	rew_hbox.anchor_right = 1.0
+	rew_hbox.offset_left = -112.0
+	rew_hbox.offset_right = -12.0
+	rew_hbox.offset_top = 8.0
+	rew_hbox.offset_bottom = 30.0
+	rew_hbox.alignment = BoxContainer.ALIGNMENT_END
+	rew_hbox.add_theme_constant_override("separation", 4)
+	rew_hbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	btn.add_child(rew_hbox)
+
+	var bolt_col := Color(0.35, 1.0, 0.60) if completed else Color(1.0, 0.92, 0.25)
+	rew_hbox.add_child(_create_spark_icon(15.0, bolt_col))
+
+	var rew_lbl := Label.new()
+	rew_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	rew_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	rew_lbl.text = "+" + str(reward)
+	rew_lbl.add_theme_font_size_override("font_size", 13)
+	rew_lbl.add_theme_color_override("font_color", bolt_col)
+	rew_hbox.add_child(rew_lbl)
+
+	# 4. Quest Description Label
+	var desc_lbl := Label.new()
+	desc_lbl.name = "QuestDesc"
+	desc_lbl.text = q_desc
+	desc_lbl.anchor_right = 1.0
+	desc_lbl.offset_left = 64.0
+	desc_lbl.offset_right = -12.0
+	desc_lbl.offset_top = 30.0
+	desc_lbl.offset_bottom = 60.0
+	desc_lbl.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	desc_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	desc_lbl.clip_text = true
+	desc_lbl.add_theme_font_size_override("font_size", 10)
+	desc_lbl.add_theme_color_override("font_color", desc_col)
+	desc_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	btn.add_child(desc_lbl)
+
+	# 5. Progress Bar & Counter Row
+	var prog_bar := ProgressBar.new()
+	prog_bar.name = "QuestProgress"
+	prog_bar.min_value = 0.0
+	prog_bar.max_value = float(target)
+	prog_bar.value = float(cur)
+	prog_bar.show_percentage = false
+	prog_bar.anchor_right = 1.0
+	prog_bar.offset_left = 64.0
+	prog_bar.offset_right = -106.0
+	prog_bar.offset_top = 66.0
+	prog_bar.offset_bottom = 78.0
+	prog_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	var pb_bg := StyleBoxFlat.new()
+	pb_bg.set_corner_radius_all(6)
+	pb_bg.bg_color = Color(0.05, 0.04, 0.12, 0.92)
+	pb_bg.set_border_width_all(1)
+	pb_bg.set_border_color(Color(0.30, 0.26, 0.45, 0.65))
+	var pb_fill := StyleBoxFlat.new()
+	pb_fill.set_corner_radius_all(6)
+	pb_fill.bg_color = accent_col
+	prog_bar.add_theme_stylebox_override("background", pb_bg)
+	prog_bar.add_theme_stylebox_override("fill", pb_fill)
+	btn.add_child(prog_bar)
+
+	var prog_lbl := Label.new()
+	prog_lbl.name = "ProgressText"
+	prog_lbl.text = "COMPLETED" if completed else (_format_sparks_compact(cur) + " / " + _format_sparks_compact(target))
+	prog_lbl.anchor_left = 1.0
+	prog_lbl.anchor_right = 1.0
+	prog_lbl.offset_left = -100.0
+	prog_lbl.offset_right = -12.0
+	prog_lbl.offset_top = 61.0
+	prog_lbl.offset_bottom = 83.0
+	prog_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	prog_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	prog_lbl.clip_text = true
+	prog_lbl.add_theme_font_size_override("font_size", 10)
+	prog_lbl.add_theme_color_override("font_color", Color(0.35, 1.0, 0.60) if completed else Color(0.90, 0.94, 1.0))
+	prog_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	btn.add_child(prog_lbl)
+
+	return btn
+
+
+func _on_unlock_bonus_mission_pressed() -> void:
+	if _overlay_drag_active or settings.daily_bonus_ad_unlocked or _bonus_mission_ad_loading:
+		return
+	sfx.play("tap")
+	_haptic_tap()
+	_bonus_mission_ad_loading = true
+	_refresh_shop_screen()
+
+	var on_reward := func():
+		_bonus_mission_ad_loading = false
+		settings.unlock_daily_bonus_mission()
+		sfx.play("unlock")
+		_haptic_celebration()
+		_refresh_shop_screen()
+
+	var on_dismissed := func():
+		_bonus_mission_ad_loading = false
+		_refresh_shop_screen()
+
+	if has_node("/root/AdManager"):
+		get_node("/root/AdManager").show_rewarded_ad(on_reward, on_dismissed)
+	else:
+		on_reward.call()
 
 
 func _build_shop_row(category: String, item_def: Dictionary) -> Button:
@@ -2534,42 +2876,6 @@ func _on_shop_item_pressed(category: String, item_id: String, cost: int, item_na
 		if _shop_sparks_label != null and is_instance_valid(_shop_sparks_label):
 			_shop_sparks_label.text = "UNLOCKED: " + item_name + "!"
 			_shop_sparks_label.add_theme_color_override("font_color", Color(0.30, 1.0, 0.55))
-
-
-func _on_double_sparks_pressed() -> void:
-	if _has_doubled_sparks_this_game or _last_earned_sparks_this_gameover <= 0:
-		return
-	sfx.play("tap")
-	_haptic_tap()
-	if _go_double_sparks_btn != null and is_instance_valid(_go_double_sparks_btn):
-		_go_double_sparks_btn.disabled = true
-		_go_double_sparks_btn.text = "   LOADING..."
-
-	var on_reward := func():
-		if _has_doubled_sparks_this_game:
-			return
-		_has_doubled_sparks_this_game = true
-		var bonus := _last_earned_sparks_this_gameover
-		settings.add_sparks(bonus)
-		_update_sparks_displays()
-		sfx.play("unlock")
-		_haptic_celebration()
-		if _go_sparks_label != null and is_instance_valid(_go_sparks_label):
-			_go_sparks_label.text = "+" + _format_sparks_compact(bonus * 2) + " SPARKS (2X!)  |  TOTAL: " + _format_sparks_compact(settings.sparks)
-			_go_sparks_label.add_theme_color_override("font_color", Color(0.30, 1.0, 0.55))
-		if _go_double_sparks_btn != null and is_instance_valid(_go_double_sparks_btn):
-			_go_double_sparks_btn.text = "   2X CLAIMED!"
-			_go_double_sparks_btn.disabled = true
-
-	var on_dismissed := func():
-		if not _has_doubled_sparks_this_game and _go_double_sparks_btn != null and is_instance_valid(_go_double_sparks_btn):
-			_go_double_sparks_btn.disabled = false
-			_go_double_sparks_btn.text = "   2X SPARKS"
-
-	if has_node("/root/AdManager"):
-		get_node("/root/AdManager").show_rewarded_ad(on_reward, on_dismissed)
-	else:
-		on_reward.call()
 
 
 # =====================================================
@@ -4360,14 +4666,15 @@ func _display_achievement_toast(ach: Dictionary) -> void:
 	icon_panel.draw.connect(func(): _draw_badge_icon(icon_panel, icon_type, icon_color))
 	icon_frame.add_child(icon_panel)
 
-	# Achievement unlocked header label
+	# Achievement / Mission unlocked header label
 	var header := Label.new()
-	header.text = "BADGE UNLOCKED!"
+	header.text = str(ach.get("header", "BADGE UNLOCKED!"))
 	header.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	header.add_theme_font_size_override("font_size", 12)
+	header.add_theme_font_size_override("font_size", 11)
 	header.add_theme_color_override("font_color", ach_color)
 	header.position = Vector2(74, 14)
 	header.size = Vector2(294, 18)
+	header.clip_text = true
 	toast.add_child(header)
 
 	# Achievement name
@@ -5045,30 +5352,60 @@ func _game_over() -> void:
 	if is_new_record:
 		_haptic_celebration()
 
-	# Award Neon Sparks for this run (incremental if continuing after a revive)
-	var newly_earned_sparks: int = 0
+	# Update Daily Missions progress for this run (incremental if continuing after a revive)
+	var mission_sparks_earned: int = 0
 	if not _tamper_flagged:
-		var total_run_sparks: int = settings.calculate_run_sparks(
-			score,
-			total_correct,
+		var delta_score: int = maxi(0, score - _mission_run_credited_score)
+		var delta_swipes: int = maxi(0, total_correct - _mission_run_credited_swipes)
+		var delta_frenzies: int = maxi(0, frenzies_triggered_this_game - _mission_run_credited_frenzies)
+		var delta_holds: int = maxi(0, _hold_squares_completed_this_game - _mission_run_credited_holds)
+		var delta_fast: int = maxi(0, _fast_swipes_this_game - _mission_run_credited_fast)
+		var count_this_game: bool = not _mission_run_game_counted
+
+		_mission_run_credited_score = score
+		_mission_run_credited_swipes = total_correct
+		_mission_run_credited_frenzies = frenzies_triggered_this_game
+		_mission_run_credited_holds = _hold_squares_completed_this_game
+		_mission_run_credited_fast = _fast_swipes_this_game
+		if total_correct > 0 or score > 0:
+			_mission_run_game_counted = true
+
+		var completed_missions: Array[Dictionary] = settings.update_daily_missions_from_run(
+			delta_score,
+			delta_swipes,
 			best_streak_this_game,
-			frenzies_triggered_this_game,
-			_hold_squares_completed_this_game
+			delta_frenzies,
+			delta_holds,
+			_remaps_survived_this_game,
+			delta_fast,
+			count_this_game
 		)
-		newly_earned_sparks = maxi(0, total_run_sparks - _sparks_awarded_this_run)
-		_sparks_awarded_this_run = total_run_sparks
-		if newly_earned_sparks > 0:
-			settings.add_sparks(newly_earned_sparks)
-	_last_earned_sparks_this_gameover = newly_earned_sparks
-	_has_doubled_sparks_this_game = false
+		for m_def: Dictionary in completed_missions:
+			var m_reward: int = int(m_def.get("reward", 0))
+			mission_sparks_earned += m_reward
+			_queue_achievement_toast({
+				"header": "MISSION COMPLETE!  +" + str(m_reward) + " SPARKS",
+				"name": str(m_def.get("name", "DAILY MISSION")),
+				"desc": str(m_def.get("desc", "")),
+				"icon": str(m_def.get("icon", "bolt")),
+				"color": m_def.get("color", Color(1.0, 0.90, 0.25)),
+			})
+
 	_update_sparks_displays()
+	var m_sum: Dictionary = settings.get_daily_missions_summary()
+	var m_done: int = int(m_sum.get("done", 0))
+	var m_total: int = int(m_sum.get("total", 3))
 	if _go_sparks_label != null and is_instance_valid(_go_sparks_label):
-		_go_sparks_label.text = "+" + _format_sparks_compact(newly_earned_sparks) + " SPARKS  |  TOTAL: " + _format_sparks_compact(settings.sparks)
-		_go_sparks_label.add_theme_color_override("font_color", Color(1.0, 0.90, 0.25))
+		if mission_sparks_earned > 0:
+			_go_sparks_label.text = "+" + _format_sparks_compact(mission_sparks_earned) + " MISSION SPARKS!  |  TOTAL: " + _format_sparks_compact(settings.sparks)
+			_go_sparks_label.add_theme_color_override("font_color", Color(0.30, 1.0, 0.55))
+		else:
+			_go_sparks_label.text = "MISSIONS: " + str(m_done) + "/" + str(m_total) + " DONE  |  SPARKS: " + _format_sparks_compact(settings.sparks)
+			_go_sparks_label.add_theme_color_override("font_color", Color(1.0, 0.90, 0.25))
 	if _go_double_sparks_btn != null and is_instance_valid(_go_double_sparks_btn):
-		_go_double_sparks_btn.visible = (newly_earned_sparks > 0)
+		_go_double_sparks_btn.visible = true
 		_go_double_sparks_btn.disabled = false
-		_go_double_sparks_btn.text = "   2X SPARKS"
+		_go_double_sparks_btn.text = "   MISSIONS " + str(m_done) + "/" + str(m_total)
 		_go_double_sparks_btn.add_theme_color_override("font_color", Color(1.0, 0.92, 0.28))
 
 	frenzy_charges = 0
@@ -6363,6 +6700,15 @@ func _haptic_danger() -> void:
 # =====================================================
 
 func _input(event: InputEvent) -> void:
+	# Debug shortcut (disabled): press 'G' to get 1000 sparks
+	# if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_G:
+	# 	settings.add_sparks(1000)
+	# 	_update_sparks_displays()
+	# 	if _shop_screen != null and _shop_screen.visible:
+	# 		_refresh_shop_screen()
+	# 	sfx.play("unlock")
+	# 	print("[DEBUG] Key G pressed: Added 1000 sparks! Current sparks: ", settings.sparks)
+
 	if _shop_screen != null and _shop_screen.visible:
 		_handle_shop_touch_scroll(event)
 		return

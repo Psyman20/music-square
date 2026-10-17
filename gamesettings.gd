@@ -153,31 +153,44 @@ const ACHIEVEMENTS := [
 	{"id": "completionist",   "name": "COMPLETIONIST",   "desc": "Unlock every badge, song, and theme", "icon": "diamond", "color": Color(1.0, 1.0, 1.0), "hidden": true},
 ]
 
-# --- Cosmetic Shop: Swipe Trails ---
+# --- Cosmetic Shop: Swipe Trails (Doubled Sparks Costs) ---
 const SWIPE_TRAILS := [
-	{"id": "neon",     "name": "NEON LASER",      "desc": "Classic glowing theme laser with bright white core", "cost": 0,   "color": Color(0.20, 0.95, 1.00)},
-	{"id": "rainbow",  "name": "PRISMATIC WAVE",  "desc": "Full-spectrum shifting HSV rainbow ribbon",          "cost": 150, "color": Color(1.00, 0.45, 0.85)},
-	{"id": "electric", "name": "THUNDER VOLT",    "desc": "High-voltage crackling lightning arcs along swipes", "cost": 300, "color": Color(1.00, 0.90, 0.20)},
-	{"id": "plasma",   "name": "SOLAR FLARE",     "desc": "Blazing crimson-amber fire beam with ember orbs",    "cost": 500, "color": Color(1.00, 0.38, 0.12)},
-	{"id": "stardust", "name": "GALAXY STARDUST", "desc": "Cosmic nebula shimmer with 4-point diamond stars",   "cost": 800, "color": Color(0.75, 0.35, 1.00)},
+	{"id": "neon",     "name": "NEON LASER",      "desc": "Classic glowing theme laser with bright white core", "cost": 0,    "color": Color(0.20, 0.95, 1.00)},
+	{"id": "rainbow",  "name": "PRISMATIC WAVE",  "desc": "Full-spectrum shifting HSV rainbow ribbon",          "cost": 300,  "color": Color(1.00, 0.45, 0.85)},
+	{"id": "electric", "name": "THUNDER VOLT",    "desc": "High-voltage crackling lightning arcs along swipes", "cost": 600,  "color": Color(1.00, 0.90, 0.20)},
+	{"id": "plasma",   "name": "SOLAR FLARE",     "desc": "Blazing crimson-amber fire beam with ember orbs",    "cost": 1000, "color": Color(1.00, 0.38, 0.12)},
+	{"id": "stardust", "name": "GALAXY STARDUST", "desc": "Cosmic nebula shimmer with 4-point diamond stars",   "cost": 1600, "color": Color(0.75, 0.35, 1.00)},
 ]
 
-# --- Cosmetic Shop: Square Skins ---
+# --- Cosmetic Shop: Square Skins (Doubled Sparks Costs) ---
 const SQUARE_SKINS := [
-	{"id": "classic",   "name": "NEON SOLID",   "desc": "Classic vibrant synthwave filled arcade squares",      "cost": 0,   "color": Color(0.90, 0.28, 0.52)},
-	{"id": "wireframe", "name": "CYBER GRID",   "desc": "Dark-glass core with dual neon borders & tech corners","cost": 200, "color": Color(0.15, 0.95, 0.85)},
-	{"id": "scanline",  "name": "RETRO CRT",    "desc": "Vintage arcade monitor scanlines & glossy reflection", "cost": 350, "color": Color(0.45, 0.80, 1.00)},
-	{"id": "equalizer", "name": "BASS REACTOR", "desc": "Live animated spectrum bars pulsing inside squares",   "cost": 600, "color": Color(0.25, 1.00, 0.50)},
-	{"id": "diamond",   "name": "PRISM CORE",   "desc": "Geometric diamond lattice & glowing inner circuits",   "cost": 900, "color": Color(1.00, 0.82, 0.20)},
+	{"id": "classic",   "name": "NEON SOLID",   "desc": "Classic vibrant synthwave filled arcade squares",      "cost": 0,    "color": Color(0.90, 0.28, 0.52)},
+	{"id": "wireframe", "name": "CYBER GRID",   "desc": "Dark-glass core with dual neon borders & tech corners","cost": 400,  "color": Color(0.15, 0.95, 0.85)},
+	{"id": "scanline",  "name": "RETRO CRT",    "desc": "Vintage arcade monitor scanlines & glossy reflection", "cost": 700,  "color": Color(0.45, 0.80, 1.00)},
+	{"id": "equalizer", "name": "BASS REACTOR", "desc": "Live animated spectrum bars pulsing inside squares",   "cost": 1200, "color": Color(0.25, 1.00, 0.50)},
+	{"id": "diamond",   "name": "PRISM CORE",   "desc": "Geometric diamond lattice & glowing inner circuits",   "cost": 1800, "color": Color(1.00, 0.82, 0.20)},
 ]
 
-# --- Cosmetic Shop: Hit Sound Packs ---
+# --- Cosmetic Shop: Hit Sound Packs (Doubled Sparks Costs) ---
 const SOUND_PACKS := [
-	{"id": "classic",     "name": "CLASSIC SYNTH", "desc": "Snappy rising sine-wave arcade blip",                 "cost": 0,   "color": Color(0.60, 0.90, 1.00)},
-	{"id": "chiptune",    "name": "8-BIT ARCADE",  "desc": "Retro square-wave 3-note coin arpeggio",              "cost": 150, "color": Color(0.30, 1.00, 0.45)},
-	{"id": "cyber_click", "name": "MECH SWITCH",   "desc": "Tactile mechanical switch click + sub-bass thump",    "cost": 300, "color": Color(1.00, 0.70, 0.20)},
-	{"id": "dream_chord", "name": "SYNTH CHORD",   "desc": "Lush polyphonic synthwave major-7th stereo pluck",    "cost": 500, "color": Color(0.95, 0.35, 0.85)},
-	{"id": "plasma_zap",  "name": "PLASMA LASER",  "desc": "Sci-fi resonant frequency sweep with FM shimmer",     "cost": 750, "color": Color(0.20, 0.85, 1.00)},
+	{"id": "classic",     "name": "CLASSIC SYNTH", "desc": "Snappy rising sine-wave arcade blip",                 "cost": 0,    "color": Color(0.60, 0.90, 1.00)},
+	{"id": "chiptune",    "name": "8-BIT ARCADE",  "desc": "Retro square-wave 3-note coin arpeggio",              "cost": 300,  "color": Color(0.30, 1.00, 0.45)},
+	{"id": "cyber_click", "name": "MECH SWITCH",   "desc": "Tactile mechanical switch click + sub-bass thump",    "cost": 600,  "color": Color(1.00, 0.70, 0.20)},
+	{"id": "dream_chord", "name": "SYNTH CHORD",   "desc": "Lush polyphonic synthwave major-7th stereo pluck",    "cost": 1000, "color": Color(0.95, 0.35, 0.85)},
+	{"id": "plasma_zap",  "name": "PLASMA LASER",  "desc": "Sci-fi resonant frequency sweep with FM shimmer",     "cost": 1500, "color": Color(0.20, 0.85, 1.00)},
+]
+
+# --- Pool of 9 Rotating Daily Quests (3 Active Daily + 1 Bonus Ad Mission per Day) ---
+const DAILY_QUESTS := [
+	{"id": "swipe_150",        "name": "RHYTHM RUNNER",     "desc": "Land 150 correct swipes across your runs today",     "target": 150,    "reward": 80,  "type": "cumulative_swipes",      "icon": "bolt",      "color": Color(0.20, 0.95, 1.00)},
+	{"id": "frenzy_3",         "name": "FRENZY HUNTER",     "desc": "Trigger Frenzy Mode 3 times today",                  "target": 3,      "reward": 100, "type": "cumulative_frenzies",    "icon": "bolt",      "color": Color(1.00, 0.90, 0.20)},
+	{"id": "hold_5",           "name": "CHARGE MASTER",     "desc": "Complete 5 Hold Squares across your runs today",     "target": 5,      "reward": 90,  "type": "cumulative_holds",       "icon": "shield",    "color": Color(0.25, 1.00, 0.55)},
+	{"id": "games_5",          "name": "DAILY GRIND",       "desc": "Complete 5 full game runs today",                    "target": 5,      "reward": 75,  "type": "cumulative_games",       "icon": "star",      "color": Color(0.70, 0.45, 1.00)},
+	{"id": "score_total_250k", "name": "SCORE COLLECTOR",   "desc": "Earn 250,000 total points across all runs today",    "target": 250000, "reward": 100, "type": "cumulative_score",       "icon": "trophy",    "color": Color(1.00, 0.55, 0.15)},
+	{"id": "streak_50",        "name": "COMBO VIRTUOSO",    "desc": "Reach a 50+ swipe streak in a single run",           "target": 50,     "reward": 110, "type": "single_streak",          "icon": "flame",     "color": Color(0.20, 0.85, 1.00)},
+	{"id": "score_run_100k",   "name": "HIGH ROLLER",       "desc": "Score 100,000+ points in a single run",              "target": 100000, "reward": 125, "type": "single_score",           "icon": "crown",     "color": Color(1.00, 0.30, 0.55)},
+	{"id": "remaps_2",         "name": "MIND BENDER",       "desc": "Survive 2 direction shuffles in a single run",       "target": 2,      "reward": 150, "type": "single_remaps",          "icon": "compass",   "color": Color(0.88, 0.32, 1.00)},
+	{"id": "fast_swipes_40",   "name": "LIGHTNING REFLEX",  "desc": "Land 40 fast swipes (<0.4s reaction) today",         "target": 40,     "reward": 120, "type": "cumulative_fast_swipes", "icon": "hourglass", "color": Color(1.00, 0.95, 0.35)},
 ]
 
 # --- Anti-Tamper Security Keys & Salts ---
@@ -251,9 +264,17 @@ var haptics_enabled: bool = true
 var board_vertical_offset: float = 0.0
 var unlocked_achievements: Array = []
 
+# --- Daily Missions State ---
+var daily_date: String = ""
+var daily_mission_ids: Array = [] # 4 IDs: [0, 1, 2] = 3 standard daily missions, [3] = 1 bonus ad mission
+var daily_bonus_ad_unlocked: bool = false
+var daily_mission_progress: Dictionary = {}
+var daily_mission_completed: Array = []
+
 
 func _ready() -> void:
 	load_data()
+	check_and_refresh_daily_missions()
 
 
 func is_song_unlocked(song: Dictionary) -> bool:
@@ -290,20 +311,152 @@ func add_sparks(amount: int) -> void:
 	save_data()
 
 
-func calculate_run_sparks(run_score: int, correct_swipes: int, best_run_streak: int, frenzies: int, holds: int) -> int:
-	if correct_swipes <= 0 and run_score <= 0:
-		return 0
-	var from_swipes: int = int(float(correct_swipes) / 3.0)
-	var from_score: int = int(float(run_score) / 5000.0)
-	var from_frenzy: int = frenzies * 3
-	var from_holds: int = holds * 4
-	var from_streak: int = int(float(best_run_streak) / 50.0) * 5
-	var total: int = from_swipes + from_score + from_frenzy + from_holds + from_streak
-	if correct_swipes >= 5:
-		total = maxi(5, total)
+func get_quest_by_id(quest_id: String) -> Dictionary:
+	for q: Dictionary in DAILY_QUESTS:
+		if str(q.get("id", "")) == quest_id:
+			return q
+	return {}
+
+
+func check_and_refresh_daily_missions() -> void:
+	var today := Time.get_date_string_from_system()
+	var valid_ids := true
+	if daily_mission_ids.size() < 4:
+		valid_ids = false
 	else:
-		total = maxi(1, total)
-	return total
+		for q_id in daily_mission_ids:
+			if get_quest_by_id(str(q_id)).is_empty():
+				valid_ids = false
+				break
+
+	if daily_date != today or not valid_ids:
+		daily_date = today
+		daily_bonus_ad_unlocked = false
+		daily_mission_progress = {}
+		daily_mission_completed = []
+		daily_mission_ids = []
+
+		# Deterministically rotate through the 9 quests based on the calendar day
+		# so consecutive days cycle through all 9 quests before repeating, plus 1 bonus quest
+		var total_q: int = DAILY_QUESTS.size()
+		var day_num: int = int(float(Time.get_unix_time_from_system()) / 86400.0)
+		var group_idx: int = posmod(day_num, 3) # 0, 1, or 2 -> selects 3 non-overlapping quests from the 9
+		var cycle_num: int = int(float(day_num) / 3.0)
+
+		var indices: Array[int] = []
+		for i in range(total_q):
+			indices.append(i)
+		# Deterministic permutation per 3-day cycle so the groupings also feel fresh
+		var rng := RandomNumberGenerator.new()
+		rng.seed = int(cycle_num * 928371 + 1337)
+		for i in range(total_q - 1, 0, -1):
+			var j := rng.randi_range(0, i)
+			var tmp := indices[i]
+			indices[i] = indices[j]
+			indices[j] = tmp
+
+		var base_start: int = group_idx * 3
+		for k in range(3):
+			var q_idx: int = indices[(base_start + k) % total_q]
+			daily_mission_ids.append(str(DAILY_QUESTS[q_idx]["id"]))
+
+		# Pick the 4th (Bonus Ad) mission from the remaining 6 quests
+		var bonus_offset: int = (base_start + 3 + posmod(day_num, 6)) % total_q
+		var bonus_idx: int = indices[bonus_offset]
+		daily_mission_ids.append(str(DAILY_QUESTS[bonus_idx]["id"]))
+
+		save_data()
+
+
+func unlock_daily_bonus_mission() -> void:
+	check_and_refresh_daily_missions()
+	if not daily_bonus_ad_unlocked:
+		daily_bonus_ad_unlocked = true
+		save_data()
+
+
+func get_daily_mission_progress(quest_id: String) -> int:
+	return int(daily_mission_progress.get(quest_id, 0))
+
+
+func is_daily_mission_completed(quest_id: String) -> bool:
+	return quest_id in daily_mission_completed
+
+
+func get_daily_missions_summary() -> Dictionary:
+	check_and_refresh_daily_missions()
+	var total_unlocked: int = 4 if daily_bonus_ad_unlocked else 3
+	var done_count: int = 0
+	for i in range(mini(total_unlocked, daily_mission_ids.size())):
+		var q_id := str(daily_mission_ids[i])
+		if q_id in daily_mission_completed:
+			done_count += 1
+	return {
+		"done": done_count,
+		"total": total_unlocked,
+		"can_unlock_bonus": not daily_bonus_ad_unlocked,
+	}
+
+
+func update_daily_missions_from_run(
+	run_score: int,
+	correct_swipes: int,
+	best_run_streak: int,
+	frenzies: int,
+	holds: int,
+	remaps: int,
+	fast_swipes: int,
+	count_game: bool = true
+) -> Array[Dictionary]:
+	check_and_refresh_daily_missions()
+	var newly_completed: Array[Dictionary] = []
+	var active_slots: int = 4 if daily_bonus_ad_unlocked else 3
+
+	for i in range(mini(active_slots, daily_mission_ids.size())):
+		var q_id := str(daily_mission_ids[i])
+		if q_id in daily_mission_completed:
+			continue
+		var q_def := get_quest_by_id(q_id)
+		if q_def.is_empty():
+			continue
+
+		var q_type := str(q_def.get("type", ""))
+		var target := int(q_def.get("target", 1))
+		var reward := int(q_def.get("reward", 75))
+		var cur := int(daily_mission_progress.get(q_id, 0))
+
+		match q_type:
+			"cumulative_swipes":
+				cur += maxi(0, correct_swipes)
+			"cumulative_frenzies":
+				cur += maxi(0, frenzies)
+			"cumulative_holds":
+				cur += maxi(0, holds)
+			"cumulative_games":
+				if count_game and (correct_swipes > 0 or run_score > 0):
+					cur += 1
+			"cumulative_score":
+				cur += maxi(0, run_score)
+			"cumulative_fast_swipes":
+				cur += maxi(0, fast_swipes)
+			"single_streak":
+				cur = maxi(cur, best_run_streak)
+			"single_score":
+				cur = maxi(cur, run_score)
+			"single_remaps":
+				cur = maxi(cur, remaps)
+
+		cur = mini(cur, target)
+		daily_mission_progress[q_id] = cur
+
+		if cur >= target:
+			daily_mission_completed.append(q_id)
+			sparks += reward
+			lifetime_sparks += reward
+			newly_completed.append(q_def)
+
+	save_data()
+	return newly_completed
 
 
 func unlock_cosmetic(category: String, item_id: String, cost: int) -> bool:
@@ -378,6 +531,11 @@ func save_data() -> void:
 		"haptics_enabled": haptics_enabled,
 		"board_vertical_offset": board_vertical_offset,
 		"unlocked_achievements": unlocked_achievements,
+		"daily_date": daily_date,
+		"daily_mission_ids": daily_mission_ids,
+		"daily_bonus_ad_unlocked": daily_bonus_ad_unlocked,
+		"daily_mission_progress": daily_mission_progress,
+		"daily_mission_completed": daily_mission_completed,
 	}
 	data["_checksum"] = _compute_checksum(data)
 	var file := FileAccess.open_encrypted_with_pass(SAVE_FILE, FileAccess.WRITE, _SAVE_KEY)
@@ -480,6 +638,20 @@ func load_data() -> void:
 		for ach_id in raw_achievements:
 			unlocked_achievements.append(str(ach_id))
 
+		daily_date = str(data.get("daily_date", ""))
+		daily_bonus_ad_unlocked = bool(data.get("daily_bonus_ad_unlocked", false))
+		daily_mission_ids = []
+		for m_id in data.get("daily_mission_ids", []):
+			daily_mission_ids.append(str(m_id))
+		var raw_prog = data.get("daily_mission_progress", {})
+		daily_mission_progress = {}
+		if raw_prog is Dictionary:
+			for k in raw_prog:
+				daily_mission_progress[str(k)] = int(raw_prog[k])
+		daily_mission_completed = []
+		for c_id in data.get("daily_mission_completed", []):
+			daily_mission_completed.append(str(c_id))
+
 		# Automatically migrate old unencrypted saves to encrypted format
 		if not is_encrypted:
 			save_data()
@@ -516,4 +688,10 @@ func reset_game_data() -> void:
 	haptics_enabled = true
 	board_vertical_offset = 0.0
 	unlocked_achievements = []
+	daily_date = ""
+	daily_mission_ids = []
+	daily_bonus_ad_unlocked = false
+	daily_mission_progress = {}
+	daily_mission_completed = []
+	check_and_refresh_daily_missions()
 	save_data()
