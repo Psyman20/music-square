@@ -237,6 +237,27 @@ var _badges_scroll: ScrollContainer
 # --- Leaderboard UI ---
 var _leaderboard_button: Button
 
+# --- Neon Sparks & Cosmetic Shop UI ---
+var _shop_button: Button
+var _menu_sparks_btn: Button
+var _menu_sparks_label: Label
+var _shop_screen: Control
+var _shop_sparks_icon: Control
+var _shop_sparks_label: Label
+var _shop_tab_buttons: Dictionary = {}
+var _shop_active_tab: String = "trail"
+var _shop_scroll: ScrollContainer
+var _shop_list: VBoxContainer
+var _overlay_drag_is_shop: bool = false
+var _shop_scrollbar_dragging: bool = false
+var _overlay_drag_start_x: float = 0.0
+var _sparks_awarded_this_run: int = 0
+var _last_earned_sparks_this_gameover: int = 0
+var _has_doubled_sparks_this_game: bool = false
+var _go_sparks_label: Label
+var _go_double_sparks_btn: Button
+var _go_shop_btn: Button
+
 # --- Google Play Update UI ---
 var _update_modal: Control
 var _update_panel: Panel
@@ -258,6 +279,10 @@ func _ready() -> void:
 		direction_squares[dir].set_meta("dir", dir)
 	center_square.set_meta("dir", "")
 	direction_colors = _get_theme().get("board", {}).duplicate()
+
+	# Sync persisted hit sound pack
+	if sfx != null and "active_pack" in sfx:
+		sfx.active_pack = settings.selected_sfx_pack
 
 	# Create shared styleboxes
 	_create_styles()
@@ -289,6 +314,9 @@ func _ready() -> void:
 	# Themes / unlocks UI (THEMES button + selection screen).
 	_setup_themes_ui()
 
+	# Cosmetic Shop UI (SHOP button + Neon Sparks balance + Trails/Skins/Sounds shop).
+	_setup_shop_ui()
+
 	# Options UI (OPTIONS button + options overlay screen).
 	_setup_options_ui()
 
@@ -297,6 +325,9 @@ func _ready() -> void:
 
 	# Leaderboard UI (LEADERBOARD button on menu).
 	_setup_leaderboard_ui()
+
+	# Compact menu button spacing so all 7 buttons + Sparks pill fit cleanly
+	_layout_menu_buttons()
 
 	# Sync existing high score to leaderboard if returning player has a previous record
 	if not _tamper_flagged and settings != null and settings.high_score > 0:
@@ -448,6 +479,19 @@ func _apply_board_position() -> void:
 		_frenzy_hud_label.offset_bottom = mid_y + 17.0
 
 
+func _apply_skin_to_square_style(style: StyleBoxFlat, col: Color, is_center: bool = false) -> void:
+	var skin_id: String = settings.selected_skin if settings != null else "classic"
+	if skin_id == "wireframe":
+		# Dark-glass core with bright glowing neon border
+		style.bg_color = Color(col.r * 0.24, col.g * 0.24, col.b * 0.30, 0.94)
+		style.set_border_width_all(4 if is_center else 3)
+		style.set_border_color(Color(minf(1.5, col.r * 1.35 + 0.15), minf(1.5, col.g * 1.35 + 0.15), minf(1.5, col.b * 1.35 + 0.15), 0.98))
+		style.set_shadow_color(Color(col.r, col.g, col.b, 0.65))
+		style.set_shadow_size(16 if is_center else 13)
+	else:
+		style.bg_color = col
+
+
 func _apply_board_colors() -> void:
 	var frenzy_gold := Color(1.35, 1.15, 0.15)
 
@@ -479,17 +523,18 @@ func _apply_board_colors() -> void:
 				style.set_shadow_color(Color(1.0, 0.8, 0.1, 0.5))
 				style.set_shadow_size(12)
 		elif is_hold_turn and dir == current_target_direction:
-			style.bg_color = direction_colors[dir]
+			_apply_skin_to_square_style(style, direction_colors[dir], false)
 			style.set_border_width_all(3)
 			style.set_border_color(Color(0.2, 0.95, 1.0, 0.95))
 			style.set_shadow_color(Color(0.2, 0.9, 1.0, 0.65))
 			style.set_shadow_size(16)
 		else:
-			style.bg_color = direction_colors[dir]
+			_apply_skin_to_square_style(style, direction_colors[dir], false)
 		panel.add_theme_stylebox_override("panel", style)
 		panel.queue_redraw()
 
 	if center_square != null:
+		var c_target_col: Color = _last_target_color if _last_target_color.a > 0.01 else direction_colors.get("up", Color.WHITE)
 		if is_frenzy_active:
 			var c_style := _center_panel_style.duplicate()
 			c_style.bg_color = frenzy_gold
@@ -500,11 +545,15 @@ func _apply_board_colors() -> void:
 			center_square.add_theme_stylebox_override("panel", c_style)
 		elif is_hold_turn:
 			var c_style := _center_panel_style.duplicate()
-			c_style.bg_color = _last_target_color
+			_apply_skin_to_square_style(c_style, c_target_col, true)
 			c_style.set_border_width_all(3)
 			c_style.set_border_color(Color(0.2, 0.95, 1.0, 0.95))
 			c_style.set_shadow_color(Color(0.2, 0.9, 1.0, 0.65))
 			c_style.set_shadow_size(16)
+			center_square.add_theme_stylebox_override("panel", c_style)
+		else:
+			var c_style := _center_panel_style.duplicate()
+			_apply_skin_to_square_style(c_style, c_target_col, true)
 			center_square.add_theme_stylebox_override("panel", c_style)
 		center_square.queue_redraw()
 
@@ -525,6 +574,9 @@ func _on_board_square_draw(square: Panel) -> void:
 
 	var sq_dir: String = str(square.get_meta("dir", ""))
 
+	# Draw custom cosmetic Square Skin pattern underneath icons/symbols
+	_draw_square_skin_overlay(square, sq_dir)
+
 	# Power-up square icon
 	if sq_dir != "" and sq_dir == powerup_square_dir and powerup_type != "" and not is_frenzy_active:
 		_draw_powerup_icon(square, powerup_type)
@@ -543,6 +595,90 @@ func _on_board_square_draw(square: Panel) -> void:
 	if is_hold_turn and not is_frenzy_active:
 		if square == center_square or (sq_dir != "" and sq_dir == current_target_direction):
 			_draw_hold_ring(square, square == center_square)
+
+
+func _draw_square_skin_overlay(panel: Panel, sq_dir: String) -> void:
+	if settings == null:
+		return
+	var skin_id: String = settings.selected_skin
+	if skin_id == "classic":
+		return
+
+	var s: Vector2 = panel.size
+	var c: Vector2 = s / 2.0
+	var base_col: Color
+	if panel == center_square:
+		base_col = _last_target_color if _last_target_color.a > 0.01 else direction_colors.get("up", Color.WHITE)
+	else:
+		base_col = direction_colors.get(sq_dir, _theme_accent())
+
+	if skin_id == "wireframe":
+		# CYBER GRID: Inner neon wireframe rect + L-shaped corner brackets + edge ticks
+		var inset := 11.0
+		var wire_col := Color(minf(1.2, base_col.r * 1.3 + 0.2), minf(1.2, base_col.g * 1.3 + 0.2), minf(1.2, base_col.b * 1.3 + 0.2), 0.72)
+		panel.draw_rect(Rect2(inset, inset, s.x - inset * 2.0, s.y - inset * 2.0), wire_col, false, 2.0)
+
+		var b_in := 6.0
+		var b_len := 13.0
+		var b_col := Color(1.0, 1.0, 1.0, 0.85)
+		# Top-left
+		panel.draw_line(Vector2(b_in, b_in), Vector2(b_in + b_len, b_in), b_col, 2.5)
+		panel.draw_line(Vector2(b_in, b_in), Vector2(b_in, b_in + b_len), b_col, 2.5)
+		# Top-right
+		panel.draw_line(Vector2(s.x - b_in, b_in), Vector2(s.x - b_in - b_len, b_in), b_col, 2.5)
+		panel.draw_line(Vector2(s.x - b_in, b_in), Vector2(s.x - b_in, b_in + b_len), b_col, 2.5)
+		# Bottom-left
+		panel.draw_line(Vector2(b_in, s.y - b_in), Vector2(b_in + b_len, s.y - b_in), b_col, 2.5)
+		panel.draw_line(Vector2(b_in, s.y - b_in), Vector2(b_in, s.y - b_in - b_len), b_col, 2.5)
+		# Bottom-right
+		panel.draw_line(Vector2(s.x - b_in, s.y - b_in), Vector2(s.x - b_in - b_len, s.y - b_in), b_col, 2.5)
+		panel.draw_line(Vector2(s.x - b_in, s.y - b_in), Vector2(s.x - b_in, s.y - b_in - b_len), b_col, 2.5)
+
+	elif skin_id == "scanline":
+		# RETRO CRT: Horizontal CRT scanlines + glossy top screen highlight + inner screen bezel
+		var scan_col := Color(0.02, 0.01, 0.06, 0.28)
+		var y_pos := 10.0
+		while y_pos < s.y - 8.0:
+			panel.draw_line(Vector2(8.0, y_pos), Vector2(s.x - 8.0, y_pos), scan_col, 2.0)
+			y_pos += 6.0
+		# Glossy arcade tube reflection bar at top
+		panel.draw_rect(Rect2(12.0, 7.0, s.x - 24.0, 9.0), Color(1.0, 1.0, 1.0, 0.18), true)
+		panel.draw_rect(Rect2(8.0, 8.0, s.x - 16.0, s.y - 16.0), Color(1.0, 1.0, 1.0, 0.22), false, 1.5)
+
+	elif skin_id == "equalizer":
+		# BASS REACTOR: 5 animated spectrum analyzer bars bouncing inside the square
+		var num_bars := 5
+		var total_w := s.x - 24.0
+		var gap := 4.0
+		var bar_w := (total_w - gap * float(num_bars - 1)) / float(num_bars)
+		var max_h := s.y - 24.0
+		var t_sec := Time.get_ticks_msec() * 0.008
+		var dir_seed := float(sq_dir.hash() % 17)
+		for b in range(num_bars):
+			var phase: float = t_sec + float(b) * 1.15 + dir_seed
+			var wave: float = 0.32 + 0.28 * absf(sin(phase)) + 0.38 * _audio_pulse * (0.6 + 0.4 * cos(phase * 1.7))
+			var bh: float = clampf(wave, 0.15, 0.95) * max_h
+			var bx := 12.0 + float(b) * (bar_w + gap)
+			var by := s.y - 12.0 - bh
+			panel.draw_rect(Rect2(bx, by, bar_w, bh), Color(0.04, 0.02, 0.10, 0.26), true)
+			panel.draw_rect(Rect2(bx, by, bar_w, bh), Color(1.0, 1.0, 1.0, 0.24), true)
+			panel.draw_line(Vector2(bx, by), Vector2(bx + bar_w, by), Color(1.0, 1.0, 1.0, 0.75), 2.5)
+
+	elif skin_id == "diamond":
+		# PRISM CORE: Faceted geometric diamond lattice & corner circuit nodes
+		var m := 8.0
+		var d_pts := PackedVector2Array([
+			Vector2(c.x, m),
+			Vector2(s.x - m, c.y),
+			Vector2(c.x, s.y - m),
+			Vector2(m, c.y),
+			Vector2(c.x, m),
+		])
+		panel.draw_polyline(d_pts, Color(0.05, 0.03, 0.12, 0.35), 4.5, true)
+		panel.draw_polyline(d_pts, Color(1.0, 1.0, 1.0, 0.45), 1.8, true)
+		var c_nodes := [Vector2(14, 14), Vector2(s.x - 14, 14), Vector2(14, s.y - 14), Vector2(s.x - 14, s.y - 14)]
+		for cn: Vector2 in c_nodes:
+			panel.draw_circle(cn, 3.0, Color(1.0, 1.0, 1.0, 0.55))
 
 
 func _draw_hold_ring(panel: Panel, _is_center: bool) -> void:
@@ -786,6 +922,9 @@ func _setup_initial_game_state() -> void:
 	_last_displayed_lives = settings.MAX_LIVES
 	_has_revived_this_game = false
 	_revive_ready_to_resume = false
+	_sparks_awarded_this_run = 0
+	_last_earned_sparks_this_gameover = 0
+	_has_doubled_sparks_this_game = false
 	streak = 0
 	best_streak_this_game = 0
 	total_correct = 0
@@ -1397,6 +1536,1043 @@ func _build_theme_row(theme_def: Dictionary) -> Button:
 
 
 # =====================================================
+# NEON SPARKS & COSMETIC SHOP UI
+# =====================================================
+
+func _format_sparks_compact(n: int) -> String:
+	var val: int = maxi(0, n)
+	if val < 10000:
+		return _format_number_with_commas(val)
+	elif val < 1000000:
+		var k: float = snappedf(float(val) / 1000.0, 0.1)
+		if is_equal_approx(k, roundf(k)):
+			return str(int(roundf(k))) + "K"
+		return ("%.1f" % k) + "K"
+	elif val < 1000000000:
+		var m: float = snappedf(float(val) / 1000000.0, 0.1)
+		if is_equal_approx(m, roundf(m)):
+			return str(int(roundf(m))) + "M"
+		return ("%.1f" % m) + "M"
+	return "999M+"
+
+
+func _create_spark_icon(icon_size: float = 20.0, bolt_col: Color = Color(1.0, 0.92, 0.25)) -> Control:
+	var ctrl := Control.new()
+	ctrl.custom_minimum_size = Vector2(icon_size, icon_size)
+	ctrl.size = Vector2(icon_size, icon_size)
+	ctrl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	ctrl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ctrl.draw.connect(_draw_spark_bolt_icon.bind(ctrl, bolt_col))
+	return ctrl
+
+
+func _draw_spark_bolt_icon(ctrl: Control, bolt_col: Color) -> void:
+	var s: Vector2 = ctrl.size
+	if s.x <= 1.0 or s.y <= 1.0:
+		s = ctrl.custom_minimum_size
+	var c: Vector2 = s * 0.5
+	var r: float = minf(s.x, s.y) * 0.46
+	var pts := PackedVector2Array([
+		c + Vector2(r * 0.12, -r * 0.98),
+		c + Vector2(-r * 0.65, r * 0.08),
+		c + Vector2(-r * 0.06, r * 0.08),
+		c + Vector2(-r * 0.26, r * 0.98),
+		c + Vector2(r * 0.65, -r * 0.08),
+		c + Vector2(r * 0.06, -r * 0.08),
+	])
+	var closed := pts.duplicate()
+	closed.append(pts[0])
+	var outline_col := Color(0.06, 0.03, 0.14, 0.95)
+	var glow_col := Color(bolt_col.r, bolt_col.g, bolt_col.b, 0.55)
+	ctrl.draw_polyline(closed, outline_col, maxf(2.0, r * 0.36), true)
+	ctrl.draw_polyline(closed, glow_col, maxf(1.5, r * 0.22), true)
+	ctrl.draw_colored_polygon(pts, bolt_col.lightened(0.18))
+
+
+func _draw_shop_item_preview(ctrl: Control, category: String, item_id: String, col: Color, unlocked: bool) -> void:
+	var s: Vector2 = ctrl.size
+	if s.x <= 1.0 or s.y <= 1.0:
+		s = ctrl.custom_minimum_size
+	var c: Vector2 = s * 0.5
+	var draw_col: Color = col if unlocked else Color(col.r * 0.65, col.g * 0.65, col.b * 0.65, 0.75)
+
+	# Subtle dark badge backing
+	ctrl.draw_circle(c, 19.0, Color(0.06, 0.04, 0.14, 0.85))
+	ctrl.draw_arc(c, 19.0, 0.0, TAU, 28, Color(draw_col.r, draw_col.g, draw_col.b, 0.65), 1.8, true)
+
+	if category == "trail":
+		var pts := PackedVector2Array([
+			c + Vector2(-11, 9),
+			c + Vector2(-4, -5),
+			c + Vector2(4, 4),
+			c + Vector2(11, -9),
+		])
+		if item_id == "rainbow":
+			ctrl.draw_line(pts[0], pts[1], Color(1.0, 0.25, 0.45), 3.5, true)
+			ctrl.draw_line(pts[1], pts[2], Color(1.0, 0.88, 0.20), 4.0, true)
+			ctrl.draw_line(pts[2], pts[3], Color(0.20, 0.95, 1.0), 4.5, true)
+		else:
+			ctrl.draw_polyline(pts, Color(draw_col.r, draw_col.g, draw_col.b, 0.55), 5.5, true)
+			ctrl.draw_polyline(pts, Color(1.0, 1.0, 1.0, 0.92), 2.0, true)
+		ctrl.draw_circle(pts[3], 3.2, Color(1.0, 1.0, 1.0, 0.95))
+	elif category == "skin":
+		var sq_rect := Rect2(c.x - 10.0, c.y - 10.0, 20.0, 20.0)
+		if item_id == "wireframe":
+			ctrl.draw_rect(sq_rect, Color(draw_col.r, draw_col.g, draw_col.b, 0.20), true)
+			ctrl.draw_rect(sq_rect, draw_col, false, 2.2)
+		elif item_id == "scanline":
+			ctrl.draw_rect(sq_rect, draw_col, true)
+			ctrl.draw_line(c + Vector2(-8, -4), c + Vector2(8, -4), Color(0, 0, 0, 0.45), 1.5)
+			ctrl.draw_line(c + Vector2(-8, 1), c + Vector2(8, 1), Color(0, 0, 0, 0.45), 1.5)
+			ctrl.draw_line(c + Vector2(-8, 6), c + Vector2(8, 6), Color(0, 0, 0, 0.45), 1.5)
+		elif item_id == "equalizer":
+			ctrl.draw_rect(sq_rect, Color(draw_col.r, draw_col.g, draw_col.b, 0.25), true)
+			ctrl.draw_rect(sq_rect, draw_col, false, 1.6)
+			ctrl.draw_line(c + Vector2(-5, 7), c + Vector2(-5, -1), Color(1, 1, 1, 0.9), 2.5)
+			ctrl.draw_line(c + Vector2(0, 7), c + Vector2(0, -6), Color(1, 1, 1, 0.9), 2.5)
+			ctrl.draw_line(c + Vector2(5, 7), c + Vector2(5, 1), Color(1, 1, 1, 0.9), 2.5)
+		elif item_id == "diamond":
+			ctrl.draw_rect(sq_rect, Color(draw_col.r, draw_col.g, draw_col.b, 0.30), true)
+			var d_pts := PackedVector2Array([c + Vector2(0, -9), c + Vector2(9, 0), c + Vector2(0, 9), c + Vector2(-9, 0), c + Vector2(0, -9)])
+			ctrl.draw_polyline(d_pts, Color(1, 1, 1, 0.9), 1.8, true)
+		else:
+			ctrl.draw_rect(sq_rect, draw_col, true)
+			ctrl.draw_rect(sq_rect, Color(1, 1, 1, 0.8), false, 1.5)
+	else:
+		# Sound wave bars
+		var heights := [6.0, 12.0, 16.0, 10.0, 7.0]
+		for i in range(heights.size()):
+			var bx: float = c.x - 10.0 + float(i) * 5.0
+			var bh: float = heights[i]
+			ctrl.draw_line(Vector2(bx, c.y - bh * 0.5), Vector2(bx, c.y + bh * 0.5), draw_col, 2.6)
+
+
+func _layout_menu_buttons() -> void:
+	# Arrange the menu buttons and top Sparks balance pill cleanly with zero overlap
+	if start_button != null and is_instance_valid(start_button):
+		start_button.offset_top = 456.0
+		start_button.offset_bottom = 508.0
+	if _songs_button != null and is_instance_valid(_songs_button):
+		_songs_button.offset_top = 516.0
+		_songs_button.offset_bottom = 564.0
+		_songs_button.add_theme_font_size_override("font_size", 25)
+	if _themes_button != null and is_instance_valid(_themes_button):
+		_themes_button.offset_top = 572.0
+		_themes_button.offset_bottom = 620.0
+		_themes_button.add_theme_font_size_override("font_size", 25)
+	if _shop_button != null and is_instance_valid(_shop_button):
+		_shop_button.offset_top = 628.0
+		_shop_button.offset_bottom = 676.0
+		_shop_button.add_theme_font_size_override("font_size", 25)
+	if _badges_button != null and is_instance_valid(_badges_button):
+		_badges_button.offset_top = 684.0
+		_badges_button.offset_bottom = 732.0
+		_badges_button.add_theme_font_size_override("font_size", 25)
+	if _leaderboard_button != null and is_instance_valid(_leaderboard_button):
+		_leaderboard_button.offset_top = 740.0
+		_leaderboard_button.offset_bottom = 788.0
+		_leaderboard_button.add_theme_font_size_override("font_size", 22)
+	if _options_button != null and is_instance_valid(_options_button):
+		_options_button.offset_top = 796.0
+		_options_button.offset_bottom = 844.0
+		_options_button.add_theme_font_size_override("font_size", 25)
+
+
+func _setup_shop_ui() -> void:
+	# 1. Top Sparks Balance Pill on MenuScreen (fixed 240px width matching menu buttons, clip_contents = true)
+	_menu_sparks_btn = Button.new()
+	_menu_sparks_btn.name = "MenuSparksPill"
+	_menu_sparks_btn.text = ""
+	_menu_sparks_btn.clip_contents = true
+	_menu_sparks_btn.anchor_left = 0.5
+	_menu_sparks_btn.anchor_right = 0.5
+	_menu_sparks_btn.offset_left = -120.0
+	_menu_sparks_btn.offset_right = 120.0
+	_menu_sparks_btn.offset_top = 410.0
+	_menu_sparks_btn.offset_bottom = 446.0
+	_menu_sparks_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	var pill_style := StyleBoxFlat.new()
+	pill_style.set_corner_radius_all(18)
+	pill_style.bg_color = Color(0.10, 0.08, 0.20, 0.92)
+	pill_style.set_border_width_all(2)
+	pill_style.set_border_color(Color(1.0, 0.85, 0.20, 0.85))
+	pill_style.set_shadow_color(Color(1.0, 0.75, 0.10, 0.35))
+	pill_style.set_shadow_size(8)
+	_menu_sparks_btn.add_theme_stylebox_override("normal", pill_style)
+	var pill_hover := pill_style.duplicate()
+	pill_hover.set_border_color(Color(1.0, 0.95, 0.45, 1.0))
+	pill_hover.set_shadow_size(12)
+	_menu_sparks_btn.add_theme_stylebox_override("hover", pill_hover)
+	_menu_sparks_btn.add_theme_stylebox_override("pressed", pill_hover)
+	_menu_sparks_btn.pressed.connect(_open_shop_screen)
+
+	var pill_hbox := HBoxContainer.new()
+	pill_hbox.name = "PillContent"
+	pill_hbox.anchor_right = 1.0
+	pill_hbox.anchor_bottom = 1.0
+	pill_hbox.offset_left = 10.0
+	pill_hbox.offset_right = -10.0
+	pill_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	pill_hbox.add_theme_constant_override("separation", 6)
+	pill_hbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_menu_sparks_btn.add_child(pill_hbox)
+
+	pill_hbox.add_child(_create_spark_icon(18.0, Color(1.0, 0.92, 0.25)))
+
+	_menu_sparks_label = Label.new()
+	_menu_sparks_label.name = "MenuSparksLabel"
+	_menu_sparks_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_menu_sparks_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_menu_sparks_label.add_theme_font_size_override("font_size", 14)
+	_menu_sparks_label.add_theme_color_override("font_color", Color(1.0, 0.92, 0.28))
+	_menu_sparks_label.add_theme_color_override("font_outline_color", Color(0.06, 0.03, 0.14, 1.0))
+	_menu_sparks_label.add_theme_constant_override("outline_size", 4)
+	_menu_sparks_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pill_hbox.add_child(_menu_sparks_label)
+
+	menu_screen.add_child(_menu_sparks_btn)
+
+	# 2. "SHOP" button on the menu screen
+	_shop_button = Button.new()
+	_shop_button.name = "ShopButton"
+	_shop_button.text = "SHOP"
+	_shop_button.flat = true
+	_shop_button.anchor_left = 0.5
+	_shop_button.anchor_right = 0.5
+	_shop_button.offset_left = -120.0
+	_shop_button.offset_right = 120.0
+	_shop_button.offset_top = 628.0
+	_shop_button.offset_bottom = 676.0
+	_shop_button.add_theme_font_size_override("font_size", 25)
+	_shop_button.add_theme_color_override("font_color", Color(1.0, 0.95, 0.45, 1.0))
+	_shop_button.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))
+	_shop_button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	_shop_button.pressed.connect(_open_shop_screen)
+	var shop_bg := ColorRect.new()
+	shop_bg.name = "ShopButtonBg"
+	shop_bg.anchor_right = 1.0
+	shop_bg.anchor_bottom = 1.0
+	shop_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	shop_bg.color = Color(0.95, 0.72, 0.12, 0.24)
+	_shop_button.add_child(shop_bg)
+	_shop_button.move_child(shop_bg, 0)
+	menu_screen.add_child(_shop_button)
+
+	# 3. Shop overlay screen (matches exact 440px width of Songs/Themes/Badges panels)
+	_shop_screen = Control.new()
+	_shop_screen.name = "ShopScreen"
+	_shop_screen.visible = false
+	_shop_screen.anchor_right = 1.0
+	_shop_screen.anchor_bottom = 1.0
+	_shop_screen.z_index = 55
+	add_child(_shop_screen)
+
+	var backdrop := ColorRect.new()
+	backdrop.name = "Backdrop"
+	backdrop.color = Color(0, 0, 0, 0.76)
+	backdrop.anchor_right = 1.0
+	backdrop.anchor_bottom = 1.0
+	backdrop.gui_input.connect(_on_shop_backdrop_input)
+	_shop_screen.add_child(backdrop)
+
+	var panel := Panel.new()
+	panel.name = "Panel"
+	panel.clip_contents = true
+	panel.add_theme_stylebox_override("panel", _pause_panel_style)
+	panel.anchor_left = 0.5
+	panel.anchor_right = 0.5
+	panel.anchor_top = 0.5
+	panel.anchor_bottom = 0.5
+	panel.offset_left = -220.0
+	panel.offset_right = 220.0
+	panel.offset_top = -310.0
+	panel.offset_bottom = 310.0
+	panel.gui_input.connect(_on_shop_panel_input)
+	_shop_screen.add_child(panel)
+
+	var title := Label.new()
+	title.name = "Title"
+	title.text = "NEON SHOP"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 32)
+	title.add_theme_color_override("font_color", Color(1.0, 0.90, 0.28))
+	title.add_theme_color_override("font_outline_color", Color(0.12, 0.06, 0.22, 1.0))
+	title.add_theme_constant_override("outline_size", 8)
+	title.anchor_left = 0.5
+	title.anchor_right = 0.5
+	title.offset_left = -190.0
+	title.offset_right = 190.0
+	title.offset_top = 16.0
+	title.offset_bottom = 54.0
+	panel.add_child(title)
+
+	var bal_hbox := HBoxContainer.new()
+	bal_hbox.name = "BalanceRow"
+	bal_hbox.anchor_left = 0.5
+	bal_hbox.anchor_right = 0.5
+	bal_hbox.offset_left = -196.0
+	bal_hbox.offset_right = 196.0
+	bal_hbox.offset_top = 56.0
+	bal_hbox.offset_bottom = 84.0
+	bal_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	bal_hbox.add_theme_constant_override("separation", 6)
+	bal_hbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_child(bal_hbox)
+
+	_shop_sparks_icon = _create_spark_icon(18.0, Color(1.0, 0.92, 0.25))
+	bal_hbox.add_child(_shop_sparks_icon)
+
+	_shop_sparks_label = Label.new()
+	_shop_sparks_label.name = "SparksBalanceLabel"
+	_shop_sparks_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_shop_sparks_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_shop_sparks_label.add_theme_font_size_override("font_size", 14)
+	_shop_sparks_label.add_theme_color_override("font_color", Color(0.25, 0.95, 1.0))
+	_shop_sparks_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bal_hbox.add_child(_shop_sparks_label)
+
+	# Category Tabs: TRAILS | SKINS | SOUNDS
+	var tabs_hbox := HBoxContainer.new()
+	tabs_hbox.name = "CategoryTabs"
+	tabs_hbox.anchor_left = 0.5
+	tabs_hbox.anchor_right = 0.5
+	tabs_hbox.offset_left = -194.0
+	tabs_hbox.offset_right = 194.0
+	tabs_hbox.offset_top = 88.0
+	tabs_hbox.offset_bottom = 130.0
+	tabs_hbox.add_theme_constant_override("separation", 8)
+	tabs_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	panel.add_child(tabs_hbox)
+
+	var tab_defs := [
+		{"id": "trail", "label": "TRAILS"},
+		{"id": "skin",  "label": "SKINS"},
+		{"id": "sfx",   "label": "SOUNDS"},
+	]
+	for t_def: Dictionary in tab_defs:
+		var t_id: String = str(t_def["id"])
+		var t_btn := Button.new()
+		t_btn.name = "Tab_" + t_id
+		t_btn.text = str(t_def["label"])
+		t_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		t_btn.custom_minimum_size = Vector2(0, 40)
+		t_btn.add_theme_font_size_override("font_size", 14)
+		t_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+		t_btn.pressed.connect(_on_shop_tab_selected.bind(t_id))
+		tabs_hbox.add_child(t_btn)
+		_shop_tab_buttons[t_id] = t_btn
+
+	_shop_scroll = ScrollContainer.new()
+	_shop_scroll.name = "ShopScroll"
+	_shop_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_shop_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_ALWAYS
+	_shop_scroll.scroll_deadzone = 6
+	_shop_scroll.anchor_left = 0.5
+	_shop_scroll.anchor_right = 0.5
+	_shop_scroll.offset_left = -194.0
+	_shop_scroll.offset_right = 194.0
+	_shop_scroll.offset_top = 140.0
+	_shop_scroll.offset_bottom = 550.0
+	panel.add_child(_shop_scroll)
+
+	# Style the vertical scrollbar so it is clearly visible and easy to grab/swipe on mobile phones
+	var v_bar := _shop_scroll.get_v_scroll_bar()
+	if v_bar != null:
+		v_bar.custom_minimum_size = Vector2(12, 0)
+		v_bar.mouse_filter = Control.MOUSE_FILTER_PASS
+		var sb_track := StyleBoxFlat.new()
+		sb_track.set_corner_radius_all(6)
+		sb_track.bg_color = Color(0.06, 0.04, 0.14, 0.90)
+		sb_track.set_border_width_all(1)
+		sb_track.set_border_color(Color(0.35, 0.30, 0.55, 0.55))
+		sb_track.content_margin_left = 2.0
+		sb_track.content_margin_right = 2.0
+		var sb_grab := StyleBoxFlat.new()
+		sb_grab.set_corner_radius_all(6)
+		sb_grab.bg_color = Color(1.0, 0.88, 0.25, 0.90)
+		var sb_grab_hl := sb_grab.duplicate()
+		sb_grab_hl.bg_color = Color(1.0, 0.96, 0.55, 1.0)
+		v_bar.add_theme_stylebox_override("scroll", sb_track)
+		v_bar.add_theme_stylebox_override("grabber", sb_grab)
+		v_bar.add_theme_stylebox_override("grabber_highlight", sb_grab_hl)
+		v_bar.add_theme_stylebox_override("grabber_pressed", sb_grab_hl)
+
+	var shop_margin := MarginContainer.new()
+	shop_margin.name = "ShopMargin"
+	shop_margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	shop_margin.mouse_filter = Control.MOUSE_FILTER_PASS
+	shop_margin.add_theme_constant_override("margin_right", 8)
+	_shop_scroll.add_child(shop_margin)
+
+	_shop_list = VBoxContainer.new()
+	_shop_list.name = "ShopList"
+	_shop_list.add_theme_constant_override("separation", 10)
+	_shop_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_shop_list.mouse_filter = Control.MOUSE_FILTER_PASS
+	shop_margin.add_child(_shop_list)
+
+	var close_btn := Button.new()
+	close_btn.name = "CloseShopBtn"
+	close_btn.text = "CLOSE"
+	close_btn.anchor_left = 0.5
+	close_btn.anchor_right = 0.5
+	close_btn.offset_left = -100.0
+	close_btn.offset_right = 100.0
+	close_btn.offset_top = 562.0
+	close_btn.offset_bottom = 604.0
+	close_btn.add_theme_font_size_override("font_size", 18)
+	close_btn.add_theme_color_override("font_color", Color(1, 1, 1, 1))
+	close_btn.add_theme_stylebox_override("normal", _btn_style)
+	close_btn.add_theme_stylebox_override("hover", _btn_style)
+	close_btn.add_theme_stylebox_override("pressed", _btn_style)
+	close_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	close_btn.pressed.connect(_close_shop_screen)
+	panel.add_child(close_btn)
+
+	# 4. Game Over Panel Sparks & Shop Controls
+	_setup_gameover_sparks_ui()
+	_update_sparks_displays()
+
+
+func _setup_gameover_sparks_ui() -> void:
+	var go_panel: Panel = $GameOverScreen/GameOverPanel
+	if go_panel == null:
+		return
+
+	# Expand GameOverPanel slightly to house the Sparks reward banner & 2X/Shop buttons
+	go_panel.offset_top = -332.0
+	go_panel.offset_bottom = 332.0
+
+	var go_title: Label = $GameOverScreen/GameOverPanel/GameOverTitle
+	if go_title != null:
+		go_title.offset_top = 14.0
+		go_title.offset_bottom = 62.0
+	if new_record_badge != null:
+		new_record_badge.offset_top = 54.0
+		new_record_badge.offset_bottom = 76.0
+	if final_score_label != null:
+		final_score_label.offset_top = 70.0
+		final_score_label.offset_bottom = 134.0
+	if go_high_score != null:
+		go_high_score.offset_top = 134.0
+		go_high_score.offset_bottom = 160.0
+	if stats_label != null:
+		stats_label.offset_top = 164.0
+		stats_label.offset_bottom = 242.0
+
+	# Glowing Neon Sparks Earned Row on Game Over (with procedural vector Spark icon)
+	var go_sparks_hbox := HBoxContainer.new()
+	go_sparks_hbox.name = "GameOverSparksRow"
+	go_sparks_hbox.anchor_right = 1.0
+	go_sparks_hbox.offset_left = 10.0
+	go_sparks_hbox.offset_right = -10.0
+	go_sparks_hbox.offset_top = 246.0
+	go_sparks_hbox.offset_bottom = 276.0
+	go_sparks_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	go_sparks_hbox.add_theme_constant_override("separation", 6)
+	go_sparks_hbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	go_panel.add_child(go_sparks_hbox)
+
+	go_sparks_hbox.add_child(_create_spark_icon(17.0, Color(1.0, 0.92, 0.25)))
+
+	_go_sparks_label = Label.new()
+	_go_sparks_label.name = "GameOverSparksLabel"
+	_go_sparks_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_go_sparks_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_go_sparks_label.add_theme_font_size_override("font_size", 12)
+	_go_sparks_label.add_theme_color_override("font_color", Color(1.0, 0.90, 0.25))
+	_go_sparks_label.add_theme_color_override("font_outline_color", Color(0.08, 0.04, 0.16, 1.0))
+	_go_sparks_label.add_theme_constant_override("outline_size", 5)
+	_go_sparks_label.text = "+0 SPARKS  |  TOTAL: 0"
+	go_sparks_hbox.add_child(_go_sparks_label)
+
+	if revive_btn != null:
+		revive_btn.offset_top = 282.0
+		revive_btn.offset_bottom = 330.0
+
+	# "2X SPARKS (AD)" button (left side)
+	_go_double_sparks_btn = Button.new()
+	_go_double_sparks_btn.name = "DoubleSparksBtn"
+	_go_double_sparks_btn.text = "   2X SPARKS"
+	_go_double_sparks_btn.clip_contents = true
+	_go_double_sparks_btn.anchor_left = 0.5
+	_go_double_sparks_btn.anchor_right = 0.5
+	_go_double_sparks_btn.offset_left = -135.0
+	_go_double_sparks_btn.offset_right = -4.0
+	_go_double_sparks_btn.offset_top = 338.0
+	_go_double_sparks_btn.offset_bottom = 384.0
+	_go_double_sparks_btn.add_theme_font_size_override("font_size", 12)
+	_go_double_sparks_btn.add_theme_color_override("font_color", Color(1.0, 0.92, 0.28))
+	_go_double_sparks_btn.add_theme_color_override("font_hover_color", Color(1.0, 1.0, 0.65))
+	_go_double_sparks_btn.add_theme_stylebox_override("normal", _btn_style)
+	_go_double_sparks_btn.add_theme_stylebox_override("hover", _btn_style)
+	_go_double_sparks_btn.add_theme_stylebox_override("pressed", _btn_style)
+	_go_double_sparks_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	_go_double_sparks_btn.pressed.connect(_on_double_sparks_pressed)
+	var dbl_icon := _create_spark_icon(15.0, Color(1.0, 0.92, 0.25))
+	dbl_icon.position = Vector2(10.0, 15.0)
+	_go_double_sparks_btn.add_child(dbl_icon)
+	go_panel.add_child(_go_double_sparks_btn)
+
+	# "NEON SHOP" button (right side)
+	_go_shop_btn = Button.new()
+	_go_shop_btn.name = "GameOverShopBtn"
+	_go_shop_btn.text = "   NEON SHOP"
+	_go_shop_btn.clip_contents = true
+	_go_shop_btn.anchor_left = 0.5
+	_go_shop_btn.anchor_right = 0.5
+	_go_shop_btn.offset_left = 4.0
+	_go_shop_btn.offset_right = 135.0
+	_go_shop_btn.offset_top = 338.0
+	_go_shop_btn.offset_bottom = 384.0
+	_go_shop_btn.add_theme_font_size_override("font_size", 12)
+	_go_shop_btn.add_theme_color_override("font_color", Color(0.25, 0.95, 1.0))
+	_go_shop_btn.add_theme_color_override("font_hover_color", Color(0.65, 1.0, 1.0))
+	_go_shop_btn.add_theme_stylebox_override("normal", _btn_style)
+	_go_shop_btn.add_theme_stylebox_override("hover", _btn_style)
+	_go_shop_btn.add_theme_stylebox_override("pressed", _btn_style)
+	_go_shop_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	_go_shop_btn.pressed.connect(_open_shop_screen)
+	var shop_go_icon := _create_spark_icon(15.0, Color(0.25, 0.95, 1.0))
+	shop_go_icon.position = Vector2(10.0, 15.0)
+	_go_shop_btn.add_child(shop_go_icon)
+	go_panel.add_child(_go_shop_btn)
+
+	if retry_btn != null:
+		retry_btn.offset_top = 392.0
+		retry_btn.offset_bottom = 440.0
+	if leaderboard_btn != null:
+		leaderboard_btn.offset_top = 448.0
+		leaderboard_btn.offset_bottom = 494.0
+	if share_score_btn != null:
+		share_score_btn.offset_top = 448.0
+		share_score_btn.offset_bottom = 494.0
+	if rate_app_btn != null:
+		rate_app_btn.offset_top = 502.0
+		rate_app_btn.offset_bottom = 546.0
+	if go_menu_btn != null:
+		go_menu_btn.offset_top = 554.0
+		go_menu_btn.offset_bottom = 602.0
+
+
+func _update_sparks_displays() -> void:
+	var sp_compact := _format_sparks_compact(settings.sparks)
+	var sp_full := _format_number_with_commas(settings.sparks)
+	if _menu_sparks_label != null and is_instance_valid(_menu_sparks_label):
+		var pill_txt := sp_compact + " SPARKS  |  SHOP"
+		_menu_sparks_label.text = pill_txt
+		var f_size := 13
+		if pill_txt.length() > 18:
+			f_size = 11
+		elif pill_txt.length() > 15:
+			f_size = 12
+		_menu_sparks_label.add_theme_font_size_override("font_size", f_size)
+	if _shop_sparks_icon != null and is_instance_valid(_shop_sparks_icon):
+		_shop_sparks_icon.visible = true
+	if _shop_sparks_label != null and is_instance_valid(_shop_sparks_label):
+		var shown_bal := sp_full if settings.sparks < 1000000 else sp_compact
+		_shop_sparks_label.text = "BALANCE: " + shown_bal + " SPARKS"
+		_shop_sparks_label.add_theme_color_override("font_color", Color(0.25, 0.95, 1.0))
+		_shop_sparks_label.add_theme_font_size_override("font_size", 14)
+
+
+func _on_shop_backdrop_input(event: InputEvent) -> void:
+	if _overlay_drag_active or _shop_scrollbar_dragging:
+		return
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		_close_shop_screen()
+	elif event is InputEventScreenTouch and event.pressed:
+		_close_shop_screen()
+
+
+func _on_shop_panel_input(event: InputEvent) -> void:
+	if _shop_scroll == null:
+		return
+	if event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			_shop_scroll.scroll_vertical -= 60
+			get_viewport().set_input_as_handled()
+		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			_shop_scroll.scroll_vertical += 60
+			get_viewport().set_input_as_handled()
+
+
+func _set_shop_scroll_from_bar_y(global_y: float) -> void:
+	if _shop_scroll == null or not is_instance_valid(_shop_scroll):
+		return
+	var v_bar := _shop_scroll.get_v_scroll_bar()
+	if v_bar == null:
+		return
+	var scroll_rect := _shop_scroll.get_global_rect()
+	if scroll_rect.size.y <= 1.0:
+		return
+	var max_scroll: float = maxf(0.0, v_bar.max_value - v_bar.page)
+	if max_scroll <= 0.0:
+		_shop_scroll.scroll_vertical = 0
+		return
+	# Account for thumb height so dragging feels 1:1 from top to bottom of the track
+	var thumb_ratio: float = clampf(v_bar.page / maxf(1.0, v_bar.max_value), 0.12, 0.85)
+	var track_margin: float = scroll_rect.size.y * thumb_ratio * 0.5
+	var usable_h: float = maxf(1.0, scroll_rect.size.y - track_margin * 2.0)
+	var ratio: float = clampf((global_y - (scroll_rect.position.y + track_margin)) / usable_h, 0.0, 1.0)
+	_shop_scroll.scroll_vertical = int(roundf(ratio * max_scroll))
+
+
+func _cycle_shop_tab(dir_step: int) -> void:
+	var order := ["trail", "skin", "sfx"]
+	var idx := order.find(_shop_active_tab)
+	if idx == -1:
+		idx = 0
+	var next_idx := clampi(idx + dir_step, 0, order.size() - 1)
+	if next_idx != idx:
+		_on_shop_tab_selected(order[next_idx])
+
+
+func _handle_shop_touch_scroll(event: InputEvent) -> void:
+	if _shop_screen == null or not _shop_screen.visible or _shop_scroll == null:
+		return
+
+	var scroll_rect := _shop_scroll.get_global_rect()
+	# Generous 34px touch target on the right edge of ShopScroll for the mobile side scrollbar
+	var bar_zone_left: float = scroll_rect.end.x - 30.0
+	var bar_zone_right: float = scroll_rect.end.x + 16.0
+
+	if event is InputEventScreenTouch:
+		if event.pressed:
+			if event.position.y >= scroll_rect.position.y and event.position.y <= scroll_rect.end.y:
+				if event.position.x >= bar_zone_left and event.position.x <= bar_zone_right:
+					_shop_scrollbar_dragging = true
+					_overlay_drag_active = true
+					_overlay_drag_is_shop = false
+					_set_shop_scroll_from_bar_y(event.position.y)
+					get_viewport().set_input_as_handled()
+				elif scroll_rect.has_point(event.position):
+					_overlay_drag_active = false
+					_shop_scrollbar_dragging = false
+					_overlay_drag_is_shop = true
+					_overlay_drag_start_x = event.position.x
+					_overlay_drag_start_y = event.position.y
+					_overlay_drag_scroll_start = _shop_scroll.scroll_vertical
+		else:
+			if _shop_scrollbar_dragging:
+				_shop_scrollbar_dragging = false
+				set_deferred("_overlay_drag_active", false)
+				get_viewport().set_input_as_handled()
+			elif _overlay_drag_is_shop:
+				_overlay_drag_is_shop = false
+				if _overlay_drag_active:
+					set_deferred("_overlay_drag_active", false)
+					get_viewport().set_input_as_handled()
+
+	elif event is InputEventScreenDrag:
+		if _shop_scrollbar_dragging:
+			_set_shop_scroll_from_bar_y(event.position.y)
+			get_viewport().set_input_as_handled()
+		elif _overlay_drag_is_shop:
+			var dx: float = event.position.x - _overlay_drag_start_x
+			var dy: float = event.position.y - _overlay_drag_start_y
+			if not _overlay_drag_active and absf(dx) > 64.0 and absf(dx) > absf(dy) * 1.8:
+				_overlay_drag_active = true
+				_overlay_drag_is_shop = false
+				_cycle_shop_tab(-1 if dx > 0.0 else 1)
+				get_viewport().set_input_as_handled()
+				return
+			if absf(dy) > _OVERLAY_TAP_THRESHOLD:
+				_overlay_drag_active = true
+			if _overlay_drag_active:
+				var delta_y: float = _overlay_drag_start_y - event.position.y
+				_shop_scroll.scroll_vertical = _overlay_drag_scroll_start + int(delta_y)
+				get_viewport().set_input_as_handled()
+
+	elif event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_LEFT:
+			if event.pressed:
+				if event.position.y >= scroll_rect.position.y and event.position.y <= scroll_rect.end.y:
+					if event.position.x >= bar_zone_left and event.position.x <= bar_zone_right:
+						_shop_scrollbar_dragging = true
+						_overlay_drag_active = true
+						_overlay_drag_is_shop = false
+						_set_shop_scroll_from_bar_y(event.position.y)
+						get_viewport().set_input_as_handled()
+					elif scroll_rect.has_point(event.position):
+						_overlay_drag_active = false
+						_shop_scrollbar_dragging = false
+						_overlay_drag_is_shop = true
+						_overlay_drag_start_x = event.position.x
+						_overlay_drag_start_y = event.position.y
+						_overlay_drag_scroll_start = _shop_scroll.scroll_vertical
+			else:
+				if _shop_scrollbar_dragging:
+					_shop_scrollbar_dragging = false
+					set_deferred("_overlay_drag_active", false)
+					get_viewport().set_input_as_handled()
+				elif _overlay_drag_is_shop:
+					_overlay_drag_is_shop = false
+					if _overlay_drag_active:
+						set_deferred("_overlay_drag_active", false)
+						get_viewport().set_input_as_handled()
+
+	elif event is InputEventMouseMotion:
+		if (event.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
+			if _shop_scrollbar_dragging:
+				_set_shop_scroll_from_bar_y(event.position.y)
+				get_viewport().set_input_as_handled()
+			elif _overlay_drag_is_shop:
+				var dx: float = event.position.x - _overlay_drag_start_x
+				var dy: float = event.position.y - _overlay_drag_start_y
+				if not _overlay_drag_active and absf(dx) > 64.0 and absf(dx) > absf(dy) * 1.8:
+					_overlay_drag_active = true
+					_overlay_drag_is_shop = false
+					_cycle_shop_tab(-1 if dx > 0.0 else 1)
+					get_viewport().set_input_as_handled()
+					return
+				if absf(dy) > _OVERLAY_TAP_THRESHOLD:
+					_overlay_drag_active = true
+				if _overlay_drag_active:
+					var delta_y: float = _overlay_drag_start_y - event.position.y
+					_shop_scroll.scroll_vertical = _overlay_drag_scroll_start + int(delta_y)
+					get_viewport().set_input_as_handled()
+
+
+func _open_shop_screen() -> void:
+	_overlay_drag_active = false
+	_shop_scrollbar_dragging = false
+	_overlay_drag_is_shop = false
+	sfx.play("tap")
+	_haptic_tap()
+	_refresh_shop_screen()
+	if _shop_screen != null:
+		_shop_screen.visible = true
+
+
+func _close_shop_screen() -> void:
+	_overlay_drag_active = false
+	_shop_scrollbar_dragging = false
+	_overlay_drag_is_shop = false
+	sfx.play("tap")
+	_haptic_tap()
+	if _shop_screen != null:
+		_shop_screen.visible = false
+
+
+func _on_shop_tab_selected(tab_id: String) -> void:
+	sfx.play("tap")
+	_haptic_tap()
+	_shop_active_tab = tab_id
+	if _shop_scroll != null:
+		_shop_scroll.scroll_vertical = 0
+	_refresh_shop_screen()
+
+
+func _refresh_shop_screen() -> void:
+	_update_sparks_displays()
+
+	# Style category tabs
+	for t_id: String in _shop_tab_buttons:
+		var t_btn: Button = _shop_tab_buttons[t_id]
+		if t_btn == null or not is_instance_valid(t_btn):
+			continue
+		var is_active := (t_id == _shop_active_tab)
+		var t_style := StyleBoxFlat.new()
+		t_style.set_corner_radius_all(12)
+		if is_active:
+			t_style.bg_color = Color(0.20, 0.14, 0.36, 0.96)
+			t_style.set_border_width_all(2)
+			t_style.set_border_color(Color(1.0, 0.88, 0.25, 0.95))
+			t_style.set_shadow_color(Color(1.0, 0.80, 0.15, 0.45))
+			t_style.set_shadow_size(8)
+			t_btn.add_theme_color_override("font_color", Color(1.0, 0.92, 0.30))
+		else:
+			t_style.bg_color = Color(0.08, 0.06, 0.16, 0.80)
+			t_style.set_border_width_all(1)
+			t_style.set_border_color(Color(0.4, 0.35, 0.55, 0.5))
+			t_btn.add_theme_color_override("font_color", Color(0.70, 0.72, 0.85))
+		t_btn.add_theme_stylebox_override("normal", t_style)
+		t_btn.add_theme_stylebox_override("hover", t_style)
+		t_btn.add_theme_stylebox_override("pressed", t_style)
+
+	if _shop_list == null:
+		return
+	for child in _shop_list.get_children():
+		_shop_list.remove_child(child)
+		child.queue_free()
+
+	var items: Array = []
+	match _shop_active_tab:
+		"trail":
+			items = settings.SWIPE_TRAILS
+		"skin":
+			items = settings.SQUARE_SKINS
+		"sfx":
+			items = settings.SOUND_PACKS
+
+	for item_def: Dictionary in items:
+		_shop_list.add_child(_build_shop_row(_shop_active_tab, item_def))
+
+	# Bottom padding spacer so the last card scrolls cleanly with room to spare
+	var bottom_pad := Control.new()
+	bottom_pad.custom_minimum_size = Vector2(0, 14)
+	bottom_pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_shop_list.add_child(bottom_pad)
+
+
+func _build_shop_row(category: String, item_def: Dictionary) -> Button:
+	var item_id: String = str(item_def.get("id", ""))
+	var item_name: String = str(item_def.get("name", "?"))
+	var item_desc: String = str(item_def.get("desc", ""))
+	var cost: int = int(item_def.get("cost", 0))
+	var item_col: Color = item_def.get("color", Color(0.2, 0.95, 1.0))
+
+	var unlocked := false
+	var equipped := false
+	match category:
+		"trail":
+			unlocked = settings.is_trail_unlocked(item_id)
+			equipped = (settings.selected_trail == item_id)
+		"skin":
+			unlocked = settings.is_skin_unlocked(item_id)
+			equipped = (settings.selected_skin == item_id)
+		"sfx":
+			unlocked = settings.is_sfx_pack_unlocked(item_id)
+			equipped = (settings.selected_sfx_pack == item_id)
+
+	var can_afford: bool = (settings.sparks >= cost)
+
+	# Use empty button text + clip_contents + MOUSE_FILTER_PASS so mobile touch swipes scroll smoothly
+	var btn := Button.new()
+	btn.name = "ShopItem_" + item_id
+	btn.text = ""
+	btn.clip_contents = true
+	btn.mouse_filter = Control.MOUSE_FILTER_PASS
+	btn.custom_minimum_size = Vector2(0, 86)
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+
+	var row_style := _btn_style.duplicate()
+	var title_col := Color(1.0, 1.0, 1.0)
+	var desc_col := Color(0.78, 0.80, 0.90)
+
+	if equipped:
+		title_col = Color(1.0, 0.92, 0.30)
+		desc_col = Color(0.92, 0.88, 0.72)
+		row_style.bg_color = Color(0.16, 0.13, 0.28, 0.95)
+		row_style.set_border_width_all(2)
+		row_style.set_border_color(Color(1.0, 0.85, 0.20, 0.95))
+		row_style.set_shadow_color(Color(1.0, 0.80, 0.15, 0.40))
+		row_style.set_shadow_size(8)
+	elif unlocked:
+		title_col = Color(0.92, 0.97, 1.0)
+		row_style.bg_color = Color(0.11, 0.09, 0.22, 0.90)
+		row_style.set_border_width_all(2)
+		row_style.set_border_color(Color(item_col.r, item_col.g, item_col.b, 0.75))
+	elif can_afford:
+		title_col = Color(0.35, 1.0, 0.60)
+		desc_col = Color(0.75, 0.92, 0.82)
+		row_style.bg_color = Color(0.07, 0.19, 0.14, 0.92)
+		row_style.set_border_width_all(2)
+		row_style.set_border_color(Color(0.25, 1.0, 0.55, 0.90))
+		row_style.set_shadow_color(Color(0.15, 0.90, 0.45, 0.30))
+		row_style.set_shadow_size(6)
+	else:
+		title_col = Color(0.78, 0.68, 0.82)
+		desc_col = Color(0.58, 0.54, 0.66)
+		row_style.bg_color = Color(0.12, 0.08, 0.16, 0.80)
+		row_style.set_border_width_all(1)
+		row_style.set_border_color(Color(0.50, 0.25, 0.38, 0.55))
+
+	btn.add_theme_stylebox_override("normal", row_style)
+	var r_hover := row_style.duplicate()
+	r_hover.set_border_color(Color(1, 1, 1, 0.9))
+	btn.add_theme_stylebox_override("hover", r_hover)
+	btn.add_theme_stylebox_override("pressed", r_hover)
+	btn.pressed.connect(_on_shop_item_pressed.bind(category, item_id, cost, item_name))
+
+	# 1. Left visual preview icon (42x42)
+	var preview_icon := Control.new()
+	preview_icon.name = "PreviewIcon"
+	preview_icon.position = Vector2(12.0, 22.0)
+	preview_icon.size = Vector2(42.0, 42.0)
+	preview_icon.custom_minimum_size = Vector2(42.0, 42.0)
+	preview_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	preview_icon.draw.connect(_draw_shop_item_preview.bind(preview_icon, category, item_id, item_col, unlocked or can_afford))
+	btn.add_child(preview_icon)
+
+	# 2. Item Name Label (top-left, clipped cleanly)
+	var name_lbl := Label.new()
+	name_lbl.name = "ItemName"
+	name_lbl.text = item_name
+	name_lbl.anchor_right = 1.0
+	name_lbl.offset_left = 64.0
+	name_lbl.offset_right = -124.0
+	name_lbl.offset_top = 10.0
+	name_lbl.offset_bottom = 34.0
+	name_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	name_lbl.clip_text = true
+	name_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	name_lbl.add_theme_font_size_override("font_size", 14)
+	name_lbl.add_theme_color_override("font_color", title_col)
+	name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	btn.add_child(name_lbl)
+
+	# 3. Top-Right Status / Cost Badge (with procedural vector Spark icon)
+	var status_hbox := HBoxContainer.new()
+	status_hbox.name = "StatusBox"
+	status_hbox.anchor_left = 1.0
+	status_hbox.anchor_right = 1.0
+	status_hbox.offset_left = -122.0
+	status_hbox.offset_right = -12.0
+	status_hbox.offset_top = 10.0
+	status_hbox.offset_bottom = 34.0
+	status_hbox.alignment = BoxContainer.ALIGNMENT_END
+	status_hbox.add_theme_constant_override("separation", 4)
+	status_hbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	btn.add_child(status_hbox)
+
+	var status_lbl := Label.new()
+	status_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	status_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if equipped:
+		status_lbl.text = "EQUIPPED"
+		status_lbl.add_theme_font_size_override("font_size", 11)
+		status_lbl.add_theme_color_override("font_color", Color(1.0, 0.92, 0.30))
+		status_hbox.add_child(status_lbl)
+	elif unlocked:
+		status_lbl.text = "EQUIP"
+		status_lbl.add_theme_font_size_override("font_size", 11)
+		status_lbl.add_theme_color_override("font_color", Color(0.35, 0.95, 1.0))
+		status_hbox.add_child(status_lbl)
+	else:
+		var bolt_c := Color(0.35, 1.0, 0.60) if can_afford else Color(1.0, 0.85, 0.25)
+		status_hbox.add_child(_create_spark_icon(15.0, bolt_c))
+		status_lbl.text = _format_number_with_commas(cost)
+		status_lbl.add_theme_font_size_override("font_size", 13)
+		status_lbl.add_theme_color_override("font_color", Color(0.35, 1.0, 0.60) if can_afford else Color(0.95, 0.65, 0.72))
+		status_hbox.add_child(status_lbl)
+
+	# 4. Description Label (word-wrapped cleanly inside the card width)
+	var desc_lbl := Label.new()
+	desc_lbl.name = "ItemDesc"
+	desc_lbl.text = item_desc
+	desc_lbl.anchor_right = 1.0
+	desc_lbl.offset_left = 64.0
+	desc_lbl.offset_right = -12.0
+	desc_lbl.offset_top = 36.0
+	desc_lbl.offset_bottom = 78.0
+	desc_lbl.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	desc_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	desc_lbl.clip_text = true
+	desc_lbl.add_theme_font_size_override("font_size", 11)
+	desc_lbl.add_theme_constant_override("line_spacing", 1)
+	desc_lbl.add_theme_color_override("font_color", desc_col)
+	desc_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	btn.add_child(desc_lbl)
+
+	return btn
+
+
+func _on_shop_item_pressed(category: String, item_id: String, cost: int, item_name: String) -> void:
+	if _overlay_drag_active:
+		return
+
+	var unlocked := false
+	match category:
+		"trail":
+			unlocked = settings.is_trail_unlocked(item_id)
+		"skin":
+			unlocked = settings.is_skin_unlocked(item_id)
+		"sfx":
+			unlocked = settings.is_sfx_pack_unlocked(item_id)
+
+	if unlocked:
+		# Equip item immediately
+		match category:
+			"trail":
+				settings.selected_trail = item_id
+				sfx.play("tap")
+			"skin":
+				settings.selected_skin = item_id
+				_apply_board_colors()
+				sfx.play("tap")
+			"sfx":
+				settings.selected_sfx_pack = item_id
+				if sfx != null and "active_pack" in sfx:
+					sfx.active_pack = item_id
+				if sfx != null and sfx.has_method("preview_pack"):
+					sfx.preview_pack(item_id)
+		settings.save_data()
+		_haptic_tap()
+		_refresh_shop_screen()
+		return
+
+	# Item is locked — check if player has enough Neon Sparks
+	if settings.sparks < cost:
+		# If it's a sound pack, still let them preview how cool it sounds!
+		if category == "sfx" and sfx != null and sfx.has_method("preview_pack"):
+			sfx.preview_pack(item_id)
+		else:
+			sfx.play("wrong")
+		_haptic_wrong()
+		if _shop_sparks_icon != null and is_instance_valid(_shop_sparks_icon):
+			_shop_sparks_icon.visible = true
+		if _shop_sparks_label != null and is_instance_valid(_shop_sparks_label):
+			_shop_sparks_label.text = "NEED " + _format_sparks_compact(cost - settings.sparks) + " MORE SPARKS!"
+			_shop_sparks_label.add_theme_color_override("font_color", Color(1.0, 0.35, 0.40))
+		return
+
+	# Purchase & auto-equip!
+	if settings.unlock_cosmetic(category, item_id, cost):
+		if category == "skin":
+			_apply_board_colors()
+		elif category == "sfx":
+			if sfx != null and "active_pack" in sfx:
+				sfx.active_pack = item_id
+		sfx.play("unlock")
+		_haptic_celebration()
+		_refresh_shop_screen()
+		if _shop_sparks_icon != null and is_instance_valid(_shop_sparks_icon):
+			_shop_sparks_icon.visible = false
+		if _shop_sparks_label != null and is_instance_valid(_shop_sparks_label):
+			_shop_sparks_label.text = "UNLOCKED: " + item_name + "!"
+			_shop_sparks_label.add_theme_color_override("font_color", Color(0.30, 1.0, 0.55))
+
+
+func _on_double_sparks_pressed() -> void:
+	if _has_doubled_sparks_this_game or _last_earned_sparks_this_gameover <= 0:
+		return
+	sfx.play("tap")
+	_haptic_tap()
+	if _go_double_sparks_btn != null and is_instance_valid(_go_double_sparks_btn):
+		_go_double_sparks_btn.disabled = true
+		_go_double_sparks_btn.text = "   LOADING..."
+
+	var on_reward := func():
+		if _has_doubled_sparks_this_game:
+			return
+		_has_doubled_sparks_this_game = true
+		var bonus := _last_earned_sparks_this_gameover
+		settings.add_sparks(bonus)
+		_update_sparks_displays()
+		sfx.play("unlock")
+		_haptic_celebration()
+		if _go_sparks_label != null and is_instance_valid(_go_sparks_label):
+			_go_sparks_label.text = "+" + _format_sparks_compact(bonus * 2) + " SPARKS (2X!)  |  TOTAL: " + _format_sparks_compact(settings.sparks)
+			_go_sparks_label.add_theme_color_override("font_color", Color(0.30, 1.0, 0.55))
+		if _go_double_sparks_btn != null and is_instance_valid(_go_double_sparks_btn):
+			_go_double_sparks_btn.text = "   2X CLAIMED!"
+			_go_double_sparks_btn.disabled = true
+
+	var on_dismissed := func():
+		if not _has_doubled_sparks_this_game and _go_double_sparks_btn != null and is_instance_valid(_go_double_sparks_btn):
+			_go_double_sparks_btn.disabled = false
+			_go_double_sparks_btn.text = "   2X SPARKS"
+
+	if has_node("/root/AdManager"):
+		get_node("/root/AdManager").show_rewarded_ad(on_reward, on_dismissed)
+	else:
+		on_reward.call()
+
+
+# =====================================================
 # OPTIONS UI
 # =====================================================
 
@@ -1839,6 +3015,7 @@ func _execute_reset_game() -> void:
 	sfx.play("wrong")
 	_haptic_danger()
 	settings.reset_game_data()
+	sfx.active_pack = settings.selected_sfx_pack
 	_apply_theme()
 	_apply_board_position()
 	_play_selected_song()
@@ -1846,6 +3023,7 @@ func _execute_reset_game() -> void:
 	_close_options_screen()
 	_show_remap_banner("GAME DATA RESET")
 	_update_high_score_display()
+	_update_sparks_displays()
 	frenzy_charges = 0
 	_update_frenzy_charge_ui()
 
@@ -2406,6 +3584,7 @@ func _on_tutorial_scroll_input(event: InputEvent, scroll: ScrollContainer) -> vo
 func _is_overlay_open() -> bool:
 	return (_songs_screen != null and _songs_screen.visible) \
 		or (_themes_screen != null and _themes_screen.visible) \
+		or (_shop_screen != null and _shop_screen.visible) \
 		or (_options_screen != null and _options_screen.visible) \
 		or (_badges_screen != null and _badges_screen.visible) \
 		or (_update_modal != null and _update_modal.visible)
@@ -3825,6 +5004,7 @@ func _apply_lives_bezel() -> void:
 
 func _show_menu() -> void:
 	_set_state(settings.GameState.MENU)
+	_update_sparks_displays()
 	if not _pending_update_info.is_empty() and not _has_prompted_update and not _is_overlay_open():
 		_show_update_modal(_pending_update_info)
 
@@ -3864,6 +5044,32 @@ func _game_over() -> void:
 		is_new_record = settings.update_high_score(score, best_streak_this_game)
 	if is_new_record:
 		_haptic_celebration()
+
+	# Award Neon Sparks for this run (incremental if continuing after a revive)
+	var newly_earned_sparks: int = 0
+	if not _tamper_flagged:
+		var total_run_sparks: int = settings.calculate_run_sparks(
+			score,
+			total_correct,
+			best_streak_this_game,
+			frenzies_triggered_this_game,
+			_hold_squares_completed_this_game
+		)
+		newly_earned_sparks = maxi(0, total_run_sparks - _sparks_awarded_this_run)
+		_sparks_awarded_this_run = total_run_sparks
+		if newly_earned_sparks > 0:
+			settings.add_sparks(newly_earned_sparks)
+	_last_earned_sparks_this_gameover = newly_earned_sparks
+	_has_doubled_sparks_this_game = false
+	_update_sparks_displays()
+	if _go_sparks_label != null and is_instance_valid(_go_sparks_label):
+		_go_sparks_label.text = "+" + _format_sparks_compact(newly_earned_sparks) + " SPARKS  |  TOTAL: " + _format_sparks_compact(settings.sparks)
+		_go_sparks_label.add_theme_color_override("font_color", Color(1.0, 0.90, 0.25))
+	if _go_double_sparks_btn != null and is_instance_valid(_go_double_sparks_btn):
+		_go_double_sparks_btn.visible = (newly_earned_sparks > 0)
+		_go_double_sparks_btn.disabled = false
+		_go_double_sparks_btn.text = "   2X SPARKS"
+		_go_double_sparks_btn.add_theme_color_override("font_color", Color(1.0, 0.92, 0.28))
 
 	frenzy_charges = 0
 	if has_node("/root/AdManager"):
@@ -4272,6 +5478,14 @@ func _process_visual_juice(delta: float) -> void:
 	if _bg_shader_mat != null:
 		_bg_shader_mat.set_shader_parameter("audio_pulse", bg_pulse)
 		_bg_shader_mat.set_shader_parameter("streak_energy", streak_energy)
+
+	if settings != null and settings.selected_skin == "equalizer" and state == settings.GameState.PLAYING:
+		for dir: String in direction_squares:
+			var sq_p: Panel = direction_squares[dir]
+			if sq_p != null and is_instance_valid(sq_p):
+				sq_p.queue_redraw()
+		if center_square != null and is_instance_valid(center_square):
+			center_square.queue_redraw()
 
 	# --- Live Board Zone Preview Timer ---
 	if _board_zone_preview_active and not _board_zone_dragging:
@@ -5149,6 +6363,10 @@ func _haptic_danger() -> void:
 # =====================================================
 
 func _input(event: InputEvent) -> void:
+	if _shop_screen != null and _shop_screen.visible:
+		_handle_shop_touch_scroll(event)
+		return
+
 	# Handle game swipes only during PLAYING state
 	if state == settings.GameState.PLAYING:
 		_handle_game_input(event)
@@ -6431,6 +7649,10 @@ func _setup_font_theme() -> void:
 			_base_font = load(font_path)
 	if _base_font == null:
 		return
+	var sys_font := SystemFont.new()
+	sys_font.font_names = PackedStringArray(["Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", "Roboto", "sans-serif"])
+	if _base_font.fallbacks.is_empty():
+		_base_font.fallbacks.append(sys_font)
 	_ui_theme = Theme.new()
 	_ui_theme.default_font = _base_font
 	# Slight letter tracking looks great on Orbitron; done per-label where needed.
@@ -6593,7 +7815,9 @@ func _draw_swipe_trail() -> void:
 	if current_target_direction in direction_colors:
 		base_col = direction_colors[current_target_direction]
 
+	var trail_id: String = settings.selected_trail if settings != null else "neon"
 	var n := _trail_points.size()
+
 	for i in range(n - 1):
 		var pt0: Dictionary = _trail_points[i]
 		var pt1: Dictionary = _trail_points[i + 1]
@@ -6606,23 +7830,92 @@ func _draw_swipe_trail() -> void:
 			continue
 		var progress: float = float(i) / float(n - 1) # 0 at tail, 1 at tip
 
-		# Outer glowing neon stroke
-		var outer_w := lerpf(4.0, 18.0, progress)
-		var outer_col := Color(base_col.r, base_col.g, base_col.b, alpha * 0.45)
-		_swipe_trail.draw_line(pos0, pos1, outer_col, outer_w, true)
+		if trail_id == "rainbow":
+			# PRISMATIC WAVE: Full-spectrum shifting HSV rainbow ribbon
+			var hue := fposmod(progress * 0.9 - now * 2.2, 1.0)
+			var r_col := Color.from_hsv(hue, 0.85, 1.0)
+			var outer_w := lerpf(6.0, 22.0, progress)
+			_swipe_trail.draw_line(pos0, pos1, Color(r_col.r, r_col.g, r_col.b, alpha * 0.55), outer_w, true)
+			var mid_w := lerpf(3.0, 11.0, progress)
+			_swipe_trail.draw_line(pos0, pos1, Color(r_col.r * 1.3, r_col.g * 1.3, r_col.b * 1.3, alpha * 0.88), mid_w, true)
+			var core_w := lerpf(1.2, 4.5, progress)
+			_swipe_trail.draw_line(pos0, pos1, Color(1.0, 1.0, 1.0, alpha * 0.95), core_w, true)
 
-		# Core bright white neon stroke
-		var core_w := lerpf(1.5, 6.0, progress)
-		var core_col := Color(1.0, 1.0, 1.0, alpha * 0.95)
-		_swipe_trail.draw_line(pos0, pos1, core_col, core_w, true)
+		elif trail_id == "electric":
+			# THUNDER VOLT: Crackling cyan-gold high-voltage lightning arcs
+			var e_outer := Color(0.15, 0.92, 1.0, alpha * 0.50)
+			var e_gold := Color(1.0, 0.92, 0.25, alpha * 0.90)
+			_swipe_trail.draw_line(pos0, pos1, e_outer, lerpf(5.0, 18.0, progress), true)
+			_swipe_trail.draw_line(pos0, pos1, Color(1.0, 1.0, 1.0, alpha * 0.95), lerpf(1.5, 5.0, progress), true)
+
+			# Jagged electric arc along segment
+			var seg := pos1 - pos0
+			var seg_len := seg.length()
+			if seg_len > 2.0:
+				var perp := Vector2(-seg.y, seg.x).normalized()
+				var jitter := sin(float(i) * 7.3 + now * 45.0) * lerpf(4.0, 13.0, progress)
+				var mid_j := (pos0 + pos1) * 0.5 + perp * jitter
+				_swipe_trail.draw_line(pos0, mid_j, e_gold, 2.5, true)
+				_swipe_trail.draw_line(mid_j, pos1, e_gold, 2.5, true)
+
+		elif trail_id == "plasma":
+			# SOLAR FLARE: Blazing crimson-amber fire beam with ember orbs
+			var fire_outer := Color(1.0, 0.16, 0.04, alpha * 0.52)
+			var fire_mid := Color(1.0, 0.58, 0.08, alpha * 0.85)
+			var fire_core := Color(1.0, 0.96, 0.55, alpha * 0.98)
+			_swipe_trail.draw_line(pos0, pos1, fire_outer, lerpf(7.0, 24.0, progress), true)
+			_swipe_trail.draw_line(pos0, pos1, fire_mid, lerpf(3.5, 12.0, progress), true)
+			_swipe_trail.draw_line(pos0, pos1, fire_core, lerpf(1.5, 5.5, progress), true)
+			if i % 2 == 0:
+				var orb_r := lerpf(2.5, 6.5, progress)
+				_swipe_trail.draw_circle(pos1, orb_r * 1.5, Color(1.0, 0.35, 0.05, alpha * 0.4))
+				_swipe_trail.draw_circle(pos1, orb_r * 0.7, fire_core)
+
+		elif trail_id == "stardust":
+			# GALAXY STARDUST: Cosmic magenta-cyan nebula ribbon with 4-point diamond stars
+			var c_nebula := Color(0.65, 0.18, 1.0).lerp(Color(0.15, 0.95, 1.0), progress)
+			_swipe_trail.draw_line(pos0, pos1, Color(c_nebula.r, c_nebula.g, c_nebula.b, alpha * 0.50), lerpf(5.0, 20.0, progress), true)
+			_swipe_trail.draw_line(pos0, pos1, Color(1.0, 0.85, 1.0, alpha * 0.95), lerpf(1.5, 5.5, progress), true)
+			if i % 2 == 0:
+				var star_s := lerpf(3.5, 8.5, progress)
+				var s_pts := PackedVector2Array([
+					pos1 + Vector2(0, -star_s),
+					pos1 + Vector2(star_s * 0.35, -star_s * 0.35),
+					pos1 + Vector2(star_s, 0),
+					pos1 + Vector2(star_s * 0.35, star_s * 0.35),
+					pos1 + Vector2(0, star_s),
+					pos1 + Vector2(-star_s * 0.35, star_s * 0.35),
+					pos1 + Vector2(-star_s, 0),
+					pos1 + Vector2(-star_s * 0.35, -star_s * 0.35),
+				])
+				_swipe_trail.draw_colored_polygon(s_pts, Color(1.0, 1.0, 1.0, alpha * 0.92))
+
+		else:
+			# NEON LASER (Default): Outer glowing neon stroke + core white stroke
+			var outer_w := lerpf(4.0, 18.0, progress)
+			var outer_col := Color(base_col.r, base_col.g, base_col.b, alpha * 0.45)
+			_swipe_trail.draw_line(pos0, pos1, outer_col, outer_w, true)
+
+			var core_w := lerpf(1.5, 6.0, progress)
+			var core_col := Color(1.0, 1.0, 1.0, alpha * 0.95)
+			_swipe_trail.draw_line(pos0, pos1, core_col, core_w, true)
 
 	# Glowing tip cursor
 	var tip_pos: Vector2 = _trail_points[n - 1]["pos"]
 	var tip_age: float = (now - float(_trail_points[n - 1]["time"])) / TRAIL_LIFETIME
 	var tip_alpha: float = clampf(1.0 - tip_age, 0.0, 1.0)
 	if tip_alpha > 0.05:
-		_swipe_trail.draw_circle(tip_pos, 10.0, Color(base_col.r, base_col.g, base_col.b, tip_alpha * 0.5))
-		_swipe_trail.draw_circle(tip_pos, 5.0, Color(1.0, 1.0, 1.0, tip_alpha * 0.95))
+		var tip_col := base_col
+		if trail_id == "rainbow":
+			tip_col = Color.from_hsv(fposmod(1.0 - now * 2.2, 1.0), 0.85, 1.0)
+		elif trail_id == "electric":
+			tip_col = Color(1.0, 0.92, 0.25)
+		elif trail_id == "plasma":
+			tip_col = Color(1.0, 0.48, 0.08)
+		elif trail_id == "stardust":
+			tip_col = Color(0.75, 0.35, 1.0)
+		_swipe_trail.draw_circle(tip_pos, 11.0, Color(tip_col.r, tip_col.g, tip_col.b, tip_alpha * 0.55))
+		_swipe_trail.draw_circle(tip_pos, 5.5, Color(1.0, 1.0, 1.0, tip_alpha * 0.95))
 
 
 func _setup_board_aura() -> void:

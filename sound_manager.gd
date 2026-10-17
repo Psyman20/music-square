@@ -3,6 +3,7 @@ extends Node
 # Synthesized sound effects using AudioStreamGenerator
 # No external audio files needed
 var _players: Dictionary = {}
+var active_pack: String = "classic"
 
 
 func _ready() -> void:
@@ -11,13 +12,31 @@ func _ready() -> void:
 
 
 func play(sound_name: String) -> void:
+	if sound_name == "correct":
+		var pack_key := "correct_" + active_pack
+		if _players.has(pack_key):
+			_players[pack_key].play()
+			return
 	var player: AudioStreamPlayer = _players.get(sound_name)
 	if player != null:
 		player.play()
 
 
+func preview_pack(pack_id: String) -> void:
+	var pack_key := "correct_" + pack_id
+	if _players.has(pack_key):
+		_players[pack_key].play()
+	else:
+		play("correct")
+
+
 func _generate_all_sounds() -> void:
 	_generate_sound("correct", _make_correct_sfx)
+	_generate_sound("correct_classic", _make_correct_sfx)
+	_generate_sound("correct_chiptune", _make_correct_chiptune_sfx)
+	_generate_sound("correct_cyber_click", _make_correct_cyber_click_sfx)
+	_generate_sound("correct_dream_chord", _make_correct_dream_chord_sfx)
+	_generate_sound("correct_plasma_zap", _make_correct_plasma_zap_sfx)
 	_generate_sound("wrong", _make_wrong_sfx)
 	_generate_sound("timeout", _make_timeout_sfx)
 	_generate_sound("combo", _make_combo_sfx)
@@ -72,6 +91,103 @@ func _make_correct_sfx(sr: int) -> PackedVector2Array:
 		var freq := 800.0 + t * 2000.0  # Rising pitch
 		var val := sin(2.0 * PI * freq * t) * envelope * 0.3
 		data[i] = Vector2(val, val)
+
+	return data
+
+
+func _make_correct_chiptune_sfx(sr: int) -> PackedVector2Array:
+	# 8-Bit Arcade: Crisp square-wave 3-step coin/jump arpeggio (C6 -> E6 -> G6)
+	var length := 0.14
+	var samples := int(sr * length)
+	var data := PackedVector2Array()
+	data.resize(samples)
+	var notes := [1046.50, 1318.51, 1567.98]
+
+	for i in range(samples):
+		var t := float(i) / sr
+		var step_idx := mini(int((t / length) * 3.0), 2)
+		var freq: float = notes[step_idx]
+		var env := pow(1.0 - (t / length), 0.75)
+		var sq := 1.0 if sin(2.0 * PI * freq * t) >= 0.0 else -1.0
+		var sub := sin(2.0 * PI * (freq * 0.5) * t) * 0.3
+		var val := (sq * 0.7 + sub) * env * 0.24
+		data[i] = Vector2(val, val)
+
+	return data
+
+
+func _make_correct_cyber_click_sfx(sr: int) -> PackedVector2Array:
+	# Mech Switch: Tactile high-tech transient click + punchy sub-bass thump + bell ping
+	var length := 0.11
+	var samples := int(sr * length)
+	var data := PackedVector2Array()
+	data.resize(samples)
+
+	for i in range(samples):
+		var t := float(i) / sr
+		# Ultra-fast mechanical switch transient (first 12ms)
+		var click_env := exp(-t * 220.0)
+		var click_wave := sin(2.0 * PI * 3200.0 * t) * 0.6 + sin(2.0 * PI * 4800.0 * t) * 0.4
+		# Warm punchy body
+		var body_env := exp(-t * 38.0)
+		var body_freq := 260.0 - t * 1200.0
+		var body_wave := sin(2.0 * PI * maxf(90.0, body_freq) * t)
+		# Crisp metallic overtone
+		var ping_env := exp(-t * 28.0)
+		var ping_wave := sin(2.0 * PI * 1480.0 * t) * 0.35
+		var val := (click_wave * click_env * 0.55 + body_wave * body_env * 0.5 + ping_wave * ping_env) * 0.36
+		data[i] = Vector2(val, val)
+
+	return data
+
+
+func _make_correct_dream_chord_sfx(sr: int) -> PackedVector2Array:
+	# Synth Chord: Lush polyphonic synthwave major-7th pluck with stereo chorus detune
+	var length := 0.22
+	var samples := int(sr * length)
+	var data := PackedVector2Array()
+	data.resize(samples)
+	# F5 Major 7th chord (F5, A5, C6, E6)
+	var freqs := [698.46, 880.0, 1046.50, 1318.51]
+
+	for i in range(samples):
+		var t := float(i) / sr
+		var env := pow(1.0 - (t / length), 1.6)
+		var attack := clampf(t / 0.008, 0.0, 1.0)
+		var l_sum := 0.0
+		var r_sum := 0.0
+		for f in freqs:
+			# Rich saw-like harmonic blend with slight stereo detune
+			var fl: float = f * 0.997
+			var fr: float = f * 1.003
+			l_sum += sin(2.0 * PI * fl * t) * 0.65 + sin(4.0 * PI * fl * t) * 0.25
+			r_sum += sin(2.0 * PI * fr * t) * 0.65 + sin(4.0 * PI * fr * t) * 0.25
+		var scale := attack * env * 0.11
+		data[i] = Vector2(l_sum * scale, r_sum * scale)
+
+	return data
+
+
+func _make_correct_plasma_zap_sfx(sr: int) -> PackedVector2Array:
+	# Plasma Laser: Sci-fi resonant frequency sweep with harmonic FM shimmer
+	var length := 0.15
+	var samples := int(sr * length)
+	var data := PackedVector2Array()
+	data.resize(samples)
+
+	var phase := 0.0
+	for i in range(samples):
+		var t := float(i) / sr
+		var progress := t / length
+		var env := pow(1.0 - progress, 1.2)
+		# Fast upward then downward sci-fi pitch bend
+		var freq := 1800.0 - pow(progress, 0.55) * 1350.0 + sin(progress * PI) * 450.0
+		var fm_mod := sin(2.0 * PI * 95.0 * t) * 180.0
+		phase += (freq + fm_mod) / float(sr)
+		var wave := sin(2.0 * PI * phase) * 0.75 + sin(4.0 * PI * phase) * 0.25
+		var pan := 0.5 + 0.35 * sin(progress * PI * 2.0)
+		var val := wave * env * 0.30
+		data[i] = Vector2(val * (1.0 - pan * 0.3), val * (0.7 + pan * 0.3))
 
 	return data
 
