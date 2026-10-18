@@ -5455,6 +5455,11 @@ func _build_badge_card(ach: Dictionary) -> Panel:
 # =====================================================
 
 func _setup_leaderboard_ui() -> void:
+	if has_node("/root/LeaderboardManager"):
+		var lm = get_node("/root/LeaderboardManager")
+		if not lm.leaderboard_status_changed.is_connected(_on_leaderboard_status_changed):
+			lm.leaderboard_status_changed.connect(_on_leaderboard_status_changed)
+
 	# --- "LEADERBOARD" button on the menu screen ---
 	_leaderboard_button = Button.new()
 	_leaderboard_button.name = "LeaderboardButton"
@@ -5471,18 +5476,38 @@ func _setup_leaderboard_ui() -> void:
 	menu_screen.add_child(_leaderboard_button)
 
 
+func _on_leaderboard_status_changed(message: String) -> void:
+	_show_remap_banner(message)
+
+
 func _on_leaderboard_pressed() -> void:
 	sfx.play("tap")
 	_haptic_tap()
 	if has_node("/root/LeaderboardManager"):
-		get_node("/root/LeaderboardManager").show_leaderboard()
+		var lm = get_node("/root/LeaderboardManager")
+		if lm.is_plugin_available:
+			lm.show_leaderboard()
+		else:
+			var hs: int = settings.high_score if settings != null else 0
+			_show_remap_banner("HIGH SCORE: %s PTS" % str(hs))
+	else:
+		var hs: int = settings.high_score if settings != null else 0
+		_show_remap_banner("HIGH SCORE: %s PTS" % str(hs))
 
 
 func _on_go_leaderboard_pressed() -> void:
 	sfx.play("tap")
 	_haptic_tap()
 	if has_node("/root/LeaderboardManager"):
-		get_node("/root/LeaderboardManager").show_leaderboard()
+		var lm = get_node("/root/LeaderboardManager")
+		if lm.is_plugin_available:
+			lm.show_leaderboard()
+		else:
+			var hs: int = settings.high_score if settings != null else 0
+			_show_remap_banner("HIGH SCORE: %s PTS" % str(hs))
+	else:
+		var hs: int = settings.high_score if settings != null else 0
+		_show_remap_banner("HIGH SCORE: %s PTS" % str(hs))
 
 
 func _select_theme(theme_id: String) -> void:

@@ -6,6 +6,7 @@ extends Node
 
 signal authenticated(success: bool)
 signal score_submitted(success: bool, leaderboard_id: String)
+signal leaderboard_status_changed(message: String)
 
 const LEADERBOARD_ID := "CgkIgsuN5fIZEAIQAA"
 const PROJECT_ID := "889807136130"
@@ -19,6 +20,8 @@ var is_plugin_available: bool = false
 var _sign_in_client: Node
 var _leaderboards_client: Node
 var _pending_score: int = -1
+var _pending_show_leaderboard: bool = false
+var _is_signing_in: bool = false
 
 
 func _ready() -> void:
@@ -52,14 +55,28 @@ func _init_services() -> void:
 
 func _on_user_authenticated(success: bool) -> void:
 	is_authenticated = success
+	_is_signing_in = false
 	print("[LeaderboardManager] User authenticated: %s" % str(success))
 	authenticated.emit(success)
 
-	# If there was a score waiting while authentication finished, submit it now
-	if success and _pending_score >= 0:
-		var score_to_submit := _pending_score
-		_pending_score = -1
-		submit_score(score_to_submit)
+	if success:
+		# If there was a score waiting while authentication finished, submit it now
+		if _pending_score >= 0:
+			var score_to_submit := _pending_score
+			_pending_score = -1
+			submit_score(score_to_submit)
+
+		# If user requested to view the leaderboard while unauthenticated, show it now
+		if _pending_show_leaderboard:
+			_pending_show_leaderboard = false
+			leaderboard_status_changed.emit("OPENING LEADERBOARD...")
+			# Brief delay to allow sign-in overlay to fully dismiss and return window focus
+			await get_tree().create_timer(0.35).timeout
+			_display_leaderboard_internal()
+	else:
+		if _pending_show_leaderboard:
+			_pending_show_leaderboard = false
+			leaderboard_status_changed.emit("SIGN-IN REQUIRED FOR LEADERBOARDS")
 
 
 func _on_score_submitted(success: bool, leaderboard_id: String) -> void:
@@ -84,35 +101,62 @@ func submit_score(score: int) -> void:
 		# Save pending score and try signing in
 		_pending_score = max(_pending_score, score)
 		print("[LeaderboardManager] Not yet authenticated, queued score %d for submission" % score)
-		_sign_in_client.sign_in()
+		sign_in()
 
 
 ## Show the Play Games Leaderboard overlay
 func show_leaderboard() -> void:
 	if not is_plugin_available:
 		print("[LeaderboardManager (Simulated)] Showing leaderboard %s" % LEADERBOARD_ID)
+		leaderboard_status_changed.emit("PLAY GAMES NOT AVAILABLE")
 		return
 
-	if not is_authenticated:
+	if is_authenticated:
+		leaderboard_status_changed.emit("OPENING LEADERBOARD...")
+		_display_leaderboard_internal()
+	else:
+		_pending_show_leaderboard = true
+		leaderboard_status_changed.emit("CONNECTING TO PLAY GAMES...")
 		print("[LeaderboardManager] Requesting sign-in before showing leaderboard...")
-		_sign_in_client.sign_in()
-	
-	_leaderboards_client.show_leaderboard(LEADERBOARD_ID)
+		sign_in()
+		# Safety timeout to avoid hanging pending state indefinitely
+		get_tree().create_timer(10.0).timeout.connect(func():
+			if _pending_show_leaderboard:
+				_pending_show_leaderboard = false
+				_is_signing_in = false
+		)
+
+
+func _display_leaderboard_internal() -> void:
+	if _leaderboards_client != null:
+		_leaderboards_client.show_leaderboard(LEADERBOARD_ID)
 
 
 ## Show all leaderboards configured for the project
 func show_all_leaderboards() -> void:
 	if not is_plugin_available:
 		print("[LeaderboardManager (Simulated)] Showing all leaderboards")
+		leaderboard_status_changed.emit("PLAY GAMES NOT AVAILABLE")
 		return
 
-	if not is_authenticated:
-		_sign_in_client.sign_in()
-
-	_leaderboards_client.show_all_leaderboards()
+	if is_authenticated:
+		leaderboard_status_changed.emit("OPENING LEADERBOARDS...")
+		_leaderboards_client.show_all_leaderboards()
+	else:
+		_pending_show_leaderboard = true
+		leaderboard_status_changed.emit("CONNECTING TO PLAY GAMES...")
+		sign_in()
+		get_tree().create_timer(10.0).timeout.connect(func():
+			if _pending_show_leaderboard:
+				_pending_show_leaderboard = false
+				_is_signing_in = false
+		)
 
 
 ## Manually trigger sign-in dialog
 func sign_in() -> void:
 	if is_plugin_available:
+		if _is_signing_in:
+			return
+		_is_signing_in = true
 		_sign_in_client.sign_in()
