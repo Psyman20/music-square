@@ -4148,7 +4148,7 @@ func _setup_update_ui() -> void:
 	# Version Badge
 	_update_version_badge = Label.new()
 	_update_version_badge.name = "UpdateVersionBadge"
-	_update_version_badge.text = "v1.1.0  ➔  v1.1.1"
+	_update_version_badge.text = ""
 	_update_version_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_update_version_badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_update_version_badge.add_theme_font_size_override("font_size", 15)
@@ -4318,6 +4318,10 @@ func _on_update_now_pressed() -> void:
 
 
 func _on_update_later_pressed() -> void:
+	if not _pending_update_info.is_empty():
+		var r_ver: String = str(_pending_update_info.get("latest_version", ""))
+		var r_code: int = int(_pending_update_info.get("version_code", 0))
+		settings.dismiss_update(r_ver, r_code)
 	_hide_update_modal()
 
 
@@ -4325,16 +4329,33 @@ func _on_update_available(info: Dictionary) -> void:
 	_pending_update_info = info
 	_update_menu_version_badge()
 
-	# Display immediately if on menu and no overlay open
-	if state == settings.GameState.MENU and not _is_overlay_open():
+	var force_update: bool = bool(info.get("force_update", false))
+	var r_ver: String = str(info.get("latest_version", ""))
+	var r_code: int = int(info.get("version_code", 0))
+
+	# If already on the same release version (e.g. 1.1.1 == 1.1.1), don't pop up modal unless forced
+	if not force_update and r_ver == CURRENT_VERSION_NAME:
+		return
+
+	# If user dismissed this version update previously, do not nag them again
+	if not force_update and settings.is_update_dismissed(r_ver, r_code):
+		return
+
+	# Display immediately if on menu, haven't prompted this session yet, and no overlay open
+	if state == settings.GameState.MENU and not _has_prompted_update and not _is_overlay_open():
 		_show_update_modal(info)
 
 
 func _update_menu_version_badge() -> void:
 	var ver_label: Label = get_node_or_null("MenuScreen/VersionLabel")
 	if ver_label != null and is_instance_valid(ver_label):
-		ver_label.text = "v%s • UPDATE AVAILABLE" % CURRENT_VERSION_NAME
-		ver_label.add_theme_color_override("font_color", Color(0.25, 1.0, 0.55))
+		var r_ver: String = str(_pending_update_info.get("latest_version", ""))
+		if not r_ver.is_empty() and r_ver != CURRENT_VERSION_NAME:
+			ver_label.text = "v%s • UPDATE AVAILABLE" % CURRENT_VERSION_NAME
+			ver_label.add_theme_color_override("font_color", Color(0.25, 1.0, 0.55))
+		else:
+			ver_label.text = "v%s" % CURRENT_VERSION_NAME
+			ver_label.add_theme_color_override("font_color", Color(0.7, 0.7, 0.85, 0.6))
 
 
 func _on_version_label_gui_input(event: InputEvent) -> void:
@@ -5479,7 +5500,11 @@ func _show_menu() -> void:
 	_set_state(settings.GameState.MENU)
 	_update_sparks_displays()
 	if not _pending_update_info.is_empty() and not _has_prompted_update and not _is_overlay_open():
-		_show_update_modal(_pending_update_info)
+		var force_update: bool = bool(_pending_update_info.get("force_update", false))
+		var r_ver: String = str(_pending_update_info.get("latest_version", ""))
+		var r_code: int = int(_pending_update_info.get("version_code", 0))
+		if force_update or (r_ver != CURRENT_VERSION_NAME and not settings.is_update_dismissed(r_ver, r_code)):
+			_show_update_modal(_pending_update_info)
 
 
 func _start_game() -> void:

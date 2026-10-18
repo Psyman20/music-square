@@ -284,6 +284,10 @@ var haptics_enabled: bool = true
 var board_vertical_offset: float = 0.0
 var unlocked_achievements: Array = []
 
+# --- Update Dismissal Tracking ---
+var dismissed_update_version: String = ""
+var dismissed_update_code: int = 0
+
 # --- Daily Missions State ---
 var daily_date: String = ""
 var daily_mission_ids: Array = [] # 4 IDs: [0, 1, 2] = 3 standard daily missions, [3] = 1 bonus ad mission
@@ -519,6 +523,20 @@ func unlock_achievement(achievement_id: String) -> bool:
 	return true
 
 
+func dismiss_update(version_name: String, version_code: int) -> void:
+	dismissed_update_version = version_name
+	dismissed_update_code = version_code
+	save_data()
+
+
+func is_update_dismissed(version_name: String, version_code: int) -> bool:
+	if dismissed_update_code > 0 and version_code > 0:
+		return dismissed_update_code >= version_code
+	if not dismissed_update_version.is_empty() and not version_name.is_empty():
+		return dismissed_update_version == version_name
+	return false
+
+
 func _compute_checksum(data: Dictionary) -> String:
 	var payload := "%d:%d:%d:%s:%s:%s" % [
 		int(data.get("high_score", 0)),
@@ -556,6 +574,8 @@ func save_data() -> void:
 		"daily_bonus_ad_unlocked": daily_bonus_ad_unlocked,
 		"daily_mission_progress": daily_mission_progress,
 		"daily_mission_completed": daily_mission_completed,
+		"dismissed_update_version": dismissed_update_version,
+		"dismissed_update_code": dismissed_update_code,
 	}
 	data["_checksum"] = _compute_checksum(data)
 	var file := FileAccess.open_encrypted_with_pass(SAVE_FILE, FileAccess.WRITE, _SAVE_KEY)
@@ -671,6 +691,8 @@ func load_data() -> void:
 		daily_mission_completed = []
 		for c_id in data.get("daily_mission_completed", []):
 			daily_mission_completed.append(str(c_id))
+		dismissed_update_version = str(data.get("dismissed_update_version", ""))
+		dismissed_update_code = int(data.get("dismissed_update_code", 0))
 
 		# Automatically migrate old unencrypted saves to encrypted format
 		if not is_encrypted:
@@ -713,5 +735,7 @@ func reset_game_data() -> void:
 	daily_bonus_ad_unlocked = false
 	daily_mission_progress = {}
 	daily_mission_completed = []
+	dismissed_update_version = ""
+	dismissed_update_code = 0
 	check_and_refresh_daily_missions()
 	save_data()

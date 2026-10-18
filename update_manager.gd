@@ -101,14 +101,23 @@ func _process_version_data(data: Dictionary) -> void:
 
 	var remote_code: int = int(data.get("version_code", 0))
 	var remote_version: String = str(data.get("latest_version", ""))
+	var force_update: bool = bool(data.get("force_update", false))
 
-	# Authoritative check: Google Play versionCode integer
+	var is_newer_version: bool = _is_newer_semver(remote_version, CURRENT_VERSION_NAME)
+	var is_newer_code: bool = remote_code > CURRENT_VERSION_CODE
+
+	# An update is needed if:
+	# 1. Remote semver is newer (e.g. 1.1.2 > 1.1.1), OR
+	# 2. Remote code is higher AND either semver is different or force_update is requested.
+	# If the user is already running the same release version (e.g. 1.1.1 == 1.1.1) and force_update
+	# is false, do not flag an update just for an internal build bump (e.g. code 9 vs 10).
 	var update_needed: bool = false
-	if remote_code > CURRENT_VERSION_CODE:
+	if is_newer_version:
 		update_needed = true
-	elif remote_code == 0 and not remote_version.is_empty():
-		# Fallback: Semver string comparison
-		update_needed = _is_newer_semver(remote_version, CURRENT_VERSION_NAME)
+	elif is_newer_code and force_update:
+		update_needed = true
+	elif is_newer_code and not remote_version.is_empty() and remote_version != CURRENT_VERSION_NAME:
+		update_needed = true
 
 	is_update_available = update_needed
 
