@@ -273,6 +273,8 @@ var _go_shop_btn: Button
 var _update_modal: Control
 var _update_panel: Panel
 var _update_version_badge: Label
+var _update_desc_label: Label
+var _update_notes_scroll: ScrollContainer
 var _update_notes_label: Label
 var _update_now_btn: Button
 var _update_later_btn: Button
@@ -4126,10 +4128,10 @@ func _setup_update_ui() -> void:
 	_update_panel.anchor_right = 0.5
 	_update_panel.anchor_top = 0.5
 	_update_panel.anchor_bottom = 0.5
-	_update_panel.offset_left = -170.0
-	_update_panel.offset_right = 170.0
-	_update_panel.offset_top = -215.0
-	_update_panel.offset_bottom = 215.0
+	_update_panel.offset_left = -190.0
+	_update_panel.offset_right = 190.0
+	_update_panel.offset_top = -255.0
+	_update_panel.offset_bottom = 255.0
 	_update_modal.add_child(_update_panel)
 
 	# Title: UPDATE AVAILABLE
@@ -4138,11 +4140,11 @@ func _setup_update_ui() -> void:
 	title_lbl.text = "⚡ UPDATE AVAILABLE ⚡"
 	title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	title_lbl.add_theme_font_size_override("font_size", 20)
+	title_lbl.add_theme_font_size_override("font_size", 19)
 	title_lbl.add_theme_color_override("font_color", Color(0.25, 1.0, 0.55))
 	title_lbl.anchor_right = 1.0
-	title_lbl.offset_top = 18.0
-	title_lbl.offset_bottom = 48.0
+	title_lbl.offset_top = 16.0
+	title_lbl.offset_bottom = 44.0
 	_update_panel.add_child(title_lbl)
 
 	# Version Badge
@@ -4151,31 +4153,32 @@ func _setup_update_ui() -> void:
 	_update_version_badge.text = ""
 	_update_version_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_update_version_badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_update_version_badge.add_theme_font_size_override("font_size", 15)
+	_update_version_badge.add_theme_font_size_override("font_size", 14)
 	_update_version_badge.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3))
 	_update_version_badge.anchor_right = 1.0
-	_update_version_badge.offset_top = 50.0
-	_update_version_badge.offset_bottom = 76.0
+	_update_version_badge.offset_top = 46.0
+	_update_version_badge.offset_bottom = 72.0
 	_update_panel.add_child(_update_version_badge)
 
 	# Description text
-	var desc_lbl := Label.new()
-	desc_lbl.name = "UpdateDesc"
-	desc_lbl.text = "A new update for Music Square is waiting for you on Google Play!\nUpdate now to enjoy the latest songs, tracks, and improvements."
-	desc_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	desc_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	desc_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	desc_lbl.add_theme_font_size_override("font_size", 13)
-	desc_lbl.add_theme_color_override("font_color", Color(0.85, 0.82, 0.95))
-	desc_lbl.offset_left = 18.0
-	desc_lbl.offset_right = 322.0
-	desc_lbl.offset_top = 82.0
-	desc_lbl.offset_bottom = 158.0
-	_update_panel.add_child(desc_lbl)
+	_update_desc_label = Label.new()
+	_update_desc_label.name = "UpdateDesc"
+	_update_desc_label.text = "A new update for Music Square is waiting for you on Google Play!\nUpdate now to enjoy the latest songs, tracks, and improvements."
+	_update_desc_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_update_desc_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_update_desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_update_desc_label.add_theme_font_size_override("font_size", 12)
+	_update_desc_label.add_theme_color_override("font_color", Color(0.85, 0.82, 0.95))
+	_update_desc_label.offset_left = 18.0
+	_update_desc_label.offset_right = 362.0
+	_update_desc_label.offset_top = 74.0
+	_update_desc_label.offset_bottom = 134.0
+	_update_panel.add_child(_update_desc_label)
 
 	# Release Notes Box
 	var notes_panel := Panel.new()
 	notes_panel.name = "NotesPanel"
+	notes_panel.clip_contents = true
 	var np_style := StyleBoxFlat.new()
 	np_style.set_corner_radius_all(12)
 	np_style.bg_color = Color(0.06, 0.05, 0.14, 0.9)
@@ -4183,22 +4186,32 @@ func _setup_update_ui() -> void:
 	np_style.set_border_color(Color(0.3, 0.4, 0.6, 0.5))
 	notes_panel.add_theme_stylebox_override("panel", np_style)
 	notes_panel.offset_left = 18.0
-	notes_panel.offset_right = 322.0
-	notes_panel.offset_top = 164.0
-	notes_panel.offset_bottom = 274.0
+	notes_panel.offset_right = 362.0
+	notes_panel.offset_top = 138.0
+	notes_panel.offset_bottom = 358.0
 	_update_panel.add_child(notes_panel)
+
+	_update_notes_scroll = ScrollContainer.new()
+	_update_notes_scroll.name = "NotesScroll"
+	_update_notes_scroll.anchor_right = 1.0
+	_update_notes_scroll.anchor_bottom = 1.0
+	_update_notes_scroll.offset_left = 10.0
+	_update_notes_scroll.offset_right = -10.0
+	_update_notes_scroll.offset_top = 8.0
+	_update_notes_scroll.offset_bottom = -8.0
+	_update_notes_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_update_notes_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	notes_panel.add_child(_update_notes_scroll)
 
 	_update_notes_label = Label.new()
 	_update_notes_label.name = "NotesLabel"
 	_update_notes_label.text = "• What's New:\n• Exciting new synthwave tracks & visual polish\n• Google Play Games Services leaderboard"
 	_update_notes_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_update_notes_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_update_notes_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_update_notes_label.add_theme_font_size_override("font_size", 12)
 	_update_notes_label.add_theme_color_override("font_color", Color(0.75, 0.85, 0.98))
-	_update_notes_label.offset_left = 12.0
-	_update_notes_label.offset_right = 292.0
-	_update_notes_label.offset_top = 8.0
-	_update_notes_label.offset_bottom = 102.0
-	notes_panel.add_child(_update_notes_label)
+	_update_notes_scroll.add_child(_update_notes_label)
 
 	# UPDATE ON GOOGLE PLAY Button
 	_update_now_btn = Button.new()
@@ -4224,9 +4237,9 @@ func _setup_update_ui() -> void:
 	_update_now_btn.add_theme_stylebox_override("pressed", un_hover)
 
 	_update_now_btn.offset_left = 22.0
-	_update_now_btn.offset_right = 318.0
-	_update_now_btn.offset_top = 288.0
-	_update_now_btn.offset_bottom = 344.0
+	_update_now_btn.offset_right = 358.0
+	_update_now_btn.offset_top = 372.0
+	_update_now_btn.offset_bottom = 428.0
 	_update_now_btn.pressed.connect(_on_update_now_pressed)
 	_update_panel.add_child(_update_now_btn)
 
@@ -4252,9 +4265,9 @@ func _setup_update_ui() -> void:
 	_update_later_btn.add_theme_stylebox_override("pressed", ul_hover)
 
 	_update_later_btn.offset_left = 22.0
-	_update_later_btn.offset_right = 318.0
-	_update_later_btn.offset_top = 354.0
-	_update_later_btn.offset_bottom = 398.0
+	_update_later_btn.offset_right = 358.0
+	_update_later_btn.offset_top = 438.0
+	_update_later_btn.offset_bottom = 486.0
 	_update_later_btn.pressed.connect(_on_update_later_pressed)
 	_update_panel.add_child(_update_later_btn)
 
@@ -4272,18 +4285,28 @@ func _show_update_modal(info: Dictionary) -> void:
 	_pending_update_info = info
 	_has_prompted_update = true
 
-	var remote_version: String = str(info.get("latest_version", "1.0.6"))
+	var remote_version: String = str(info.get("latest_version", "1.1.1"))
 	var remote_notes: String = str(info.get("release_notes", ""))
+	var remote_msg: String = str(info.get("message", ""))
 	var force_update: bool = bool(info.get("force_update", false))
 
 	if _update_version_badge != null and is_instance_valid(_update_version_badge):
 		_update_version_badge.text = "v%s  ➔  v%s" % [CURRENT_VERSION_NAME, remote_version]
+
+	if _update_desc_label != null and is_instance_valid(_update_desc_label):
+		if not remote_msg.is_empty():
+			_update_desc_label.text = remote_msg
+		else:
+			_update_desc_label.text = "A new update for Music Square is waiting for you on Google Play!\nUpdate now to enjoy the latest songs, tracks, and improvements."
 
 	if _update_notes_label != null and is_instance_valid(_update_notes_label):
 		if not remote_notes.is_empty():
 			_update_notes_label.text = remote_notes
 		else:
 			_update_notes_label.text = "• What's New:\n• Exciting new content and improvements on Google Play!"
+
+	if _update_notes_scroll != null and is_instance_valid(_update_notes_scroll):
+		_update_notes_scroll.scroll_vertical = 0
 
 	if _update_later_btn != null and is_instance_valid(_update_later_btn):
 		_update_later_btn.visible = not force_update
