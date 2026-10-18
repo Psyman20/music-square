@@ -26,16 +26,20 @@
 }
 
 # ==============================================================================
-# Google Mobile Ads / AdMob SDK
+# Google Mobile Ads / AdMob SDK & Plugin
 # ==============================================================================
+-keep class org.godotengine.plugin.admob.** { *; }
+-keepclassmembers class org.godotengine.plugin.admob.** { *; }
 -keep public class com.google.android.gms.ads.** {
     public *;
 }
 -keep public class com.google.ads.** {
     public *;
 }
+-keep class com.google.android.ump.** { *; }
 -dontwarn com.google.android.gms.ads.**
 -dontwarn com.google.ads.**
+-dontwarn com.google.android.ump.**
 
 # AdMob Mediation Adapters
 -keep class com.google.ads.mediation.** { *; }

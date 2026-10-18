@@ -30,7 +30,7 @@ ext.getExportPackageName = { ->
     String appId = project.hasProperty("export_package_name") ? project.property("export_package_name") : ""
     // Check if the app id is valid, otherwise use the default.
     if (appId == null || appId.isEmpty()) {
-        appId = "com.godot.game"
+        appId = "com.psygames.musicsquare"
     }
     return appId
 }
@@ -192,7 +192,7 @@ final String VALUE_SEPARATOR_REGEX = "\\|"
 ext.getExportEnabledABIs = { ->
     String enabledABIs = project.hasProperty("export_enabled_abis") ? project.property("export_enabled_abis") : ""
     if (enabledABIs == null || enabledABIs.isEmpty()) {
-        enabledABIs = "armeabi-v7a|arm64-v8a|x86|x86_64|"
+        enabledABIs = "armeabi-v7a|arm64-v8a|"
     }
     Set<String> exportAbiFilter = []
     for (String abi_name : enabledABIs.split(VALUE_SEPARATOR_REGEX)) {
@@ -279,6 +279,17 @@ ext.getGodotPluginsRemoteBinaries = { ->
             }
         }
     }
+
+    // Fallback to required project remote dependencies when invoked directly via Gradle CLI
+    if (remoteDeps.isEmpty()) {
+        remoteDeps.addAll([
+            "androidx.appcompat:appcompat:1.7.1",
+            "androidx.lifecycle:lifecycle-process:2.8.3",
+            "com.google.android.gms:play-services-ads:24.9.0",
+            "com.google.code.gson:gson:2.11.0",
+            "com.google.android.gms:play-services-games-v2:21.0.0",
+        ])
+    }
     return remoteDeps
 }
 
@@ -296,6 +307,18 @@ ext.getGodotPluginsLocalBinaries = { ->
             for (String plugin : pluginsList.split(VALUE_SEPARATOR_REGEX)) {
                 binDeps += plugin.trim()
             }
+        }
+    }
+
+    // Fallback to required local plugin AARs when invoked directly via Gradle CLI
+    if (binDeps.isEmpty()) {
+        File admobAar = new File(rootProject.projectDir, "../../addons/AdmobPlugin/bin/release/AdmobPlugin-release.aar")
+        if (admobAar.exists()) {
+            binDeps.add(admobAar.absolutePath)
+        }
+        File gpgsAar = new File(rootProject.projectDir, "../../addons/GodotPlayGameServices/bin/release/GodotPlayGameServices-release.aar")
+        if (gpgsAar.exists()) {
+            binDeps.add(gpgsAar.absolutePath)
         }
     }
 

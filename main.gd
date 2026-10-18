@@ -2470,6 +2470,8 @@ func _open_shop_screen() -> void:
 	_overlay_drag_is_shop = false
 	sfx.play("tap")
 	_haptic_tap()
+	if not settings.daily_bonus_ad_unlocked and has_node("/root/AdManager"):
+		get_node("/root/AdManager").preload_rewarded_ad()
 	_refresh_shop_screen()
 	if _shop_screen != null:
 		_shop_screen.visible = true
@@ -2853,6 +2855,14 @@ func _on_unlock_bonus_mission_pressed() -> void:
 	var on_dismissed := func():
 		_bonus_mission_ad_loading = false
 		_refresh_shop_screen()
+
+	# Safety fallback in case ad fails silently or gets stuck
+	get_tree().create_timer(12.0).timeout.connect(func():
+		if _bonus_mission_ad_loading:
+			_bonus_mission_ad_loading = false
+			if _shop_screen != null and _shop_screen.visible:
+				_refresh_shop_screen()
+	)
 
 	if has_node("/root/AdManager"):
 		get_node("/root/AdManager").show_rewarded_ad(on_reward, on_dismissed)
@@ -6016,11 +6026,12 @@ func _on_tutorial_understood_pressed() -> void:
 
 func _process_visual_juice(delta: float) -> void:
 	# --- Swipe Trail Decay & Redraw ---
-	var now := Time.get_ticks_msec() / 1000.0
-	while not _trail_points.is_empty() and (now - float(_trail_points[0]["time"])) > TRAIL_LIFETIME:
-		_trail_points.pop_front()
-	if _swipe_trail != null and is_instance_valid(_swipe_trail):
-		_swipe_trail.queue_redraw()
+	if not _trail_points.is_empty():
+		var now := Time.get_ticks_msec() / 1000.0
+		while not _trail_points.is_empty() and (now - float(_trail_points[0]["time"])) > TRAIL_LIFETIME:
+			_trail_points.pop_front()
+		if _swipe_trail != null and is_instance_valid(_swipe_trail):
+			_swipe_trail.queue_redraw()
 
 	# --- Board Aura Animation & Ambient Particles ---
 	if _board_aura_tier > 0:
