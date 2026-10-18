@@ -42,93 +42,113 @@ const REMAP_INTERVAL_TURNS_MAX := 10
 const THEMES := [
 	{
 		"id": "synthwave", "name": "SYNTHWAVE", "unlock_score": 0,
+		"subtitle": "OUTRUN 1984 • SUNSET & WIREFRAME PEAKS",
 		"board": {
-			"up":    Color(0.88, 0.22, 0.35, 1.0),   # Crimson Red
-			"down":  Color(0.82, 0.72, 0.06, 1.0),   # Warm Yellow
-			"left":  Color(0.10, 0.70, 0.38, 1.0),   # Arcade Green
-			"right": Color(0.12, 0.46, 0.88, 1.0),   # Royal Blue
+			"up":    Color(0.95, 0.20, 0.42, 1.0),   # Outrun Laser Pink
+			"down":  Color(0.96, 0.78, 0.12, 1.0),   # Sunset Chrome Gold
+			"left":  Color(0.12, 0.86, 0.56, 1.0),   # Arcade Mint
+			"right": Color(0.14, 0.62, 0.98, 1.0),   # Electric Cyan-Blue
 		},
 		"bg": {
-			"sky_top":    Color(0.05, 0.03, 0.12),
-			"sky_mid":    Color(0.14, 0.05, 0.24),
-			"sky_bottom": Color(0.28, 0.06, 0.30),
-			"grid_color": Color(0.70, 0.15, 0.70),
-			"sun_color":  Color(0.85, 0.35, 0.55),
+			"bg_style":      0,
+			"sky_top":       Color(0.05, 0.02, 0.15),
+			"sky_mid":       Color(0.17, 0.04, 0.30),
+			"sky_bottom":    Color(0.38, 0.06, 0.34),
+			"grid_color":    Color(0.95, 0.18, 0.78),
+			"sun_color":     Color(1.00, 0.32, 0.62),
+			"haze_color":    Color(0.18, 0.03, 0.24),
+			"horizon_color": Color(0.18, 0.90, 1.00),
 		},
-		"accent":  Color(0.90, 0.28, 0.52),
-		"accent2": Color(0.65, 0.15, 0.70),
+		"accent":  Color(0.96, 0.26, 0.58),
+		"accent2": Color(0.20, 0.85, 1.00),
 	},
 	{
 		"id": "ocean", "name": "OCEAN", "unlock_score": 0,
+		"subtitle": "MIAMI LAGOON • CRESCENT MOON & NEON WAVES",
 		"board": {
-			"up":    Color(0.10, 0.58, 0.68, 1.0),   # Deep Teal
-			"down":  Color(0.82, 0.34, 0.20, 1.0),   # Burnt Coral
-			"left":  Color(0.10, 0.40, 0.80, 1.0),   # Ocean Blue
-			"right": Color(0.62, 0.76, 0.22, 1.0),   # Sea Lime
+			"up":    Color(0.08, 0.86, 0.84, 1.0),   # Miami Turquoise
+			"down":  Color(1.00, 0.40, 0.38, 1.0),   # Flamingo Coral
+			"left":  Color(0.18, 0.48, 0.96, 1.0),   # Deep Lagoon Blue
+			"right": Color(0.72, 0.92, 0.22, 1.0),   # Tropical Lime
 		},
 		"bg": {
-			"sky_top":    Color(0.02, 0.04, 0.13),
-			"sky_mid":    Color(0.03, 0.08, 0.22),
-			"sky_bottom": Color(0.04, 0.14, 0.30),
-			"grid_color": Color(0.08, 0.42, 0.62),
-			"sun_color":  Color(0.12, 0.58, 0.78),
+			"bg_style":      1,
+			"sky_top":       Color(0.01, 0.04, 0.14),
+			"sky_mid":       Color(0.02, 0.12, 0.26),
+			"sky_bottom":    Color(0.04, 0.24, 0.38),
+			"grid_color":    Color(0.06, 0.78, 0.88),
+			"sun_color":     Color(0.35, 0.95, 1.00),
+			"haze_color":    Color(0.02, 0.16, 0.24),
+			"horizon_color": Color(1.00, 0.45, 0.58),
 		},
-		"accent":  Color(0.12, 0.60, 0.78),
-		"accent2": Color(0.80, 0.34, 0.20),
+		"accent":  Color(0.12, 0.85, 0.92),
+		"accent2": Color(1.00, 0.42, 0.52),
 	},
 	{
 		"id": "ember", "name": "EMBER", "unlock_score": 0,
+		"subtitle": "SOLAR ECLIPSE • CYBER SKYLINE & HEX CORE",
 		"board": {
-			"up":    Color(0.82, 0.16, 0.16, 1.0),   # Deep Crimson
-			"down":  Color(0.84, 0.50, 0.06, 1.0),   # Amber
-			"left":  Color(0.50, 0.16, 0.78, 1.0),   # Violet (contrast)
-			"right": Color(0.82, 0.72, 0.04, 1.0),   # Gold
+			"up":    Color(0.96, 0.18, 0.20, 1.0),   # Magma Red
+			"down":  Color(1.00, 0.56, 0.08, 1.0),   # Solar Flare Orange
+			"left":  Color(0.68, 0.22, 0.92, 1.0),   # Dark-Synth Violet
+			"right": Color(0.98, 0.82, 0.14, 1.0),   # Molten Gold
 		},
 		"bg": {
-			"sky_top":    Color(0.08, 0.02, 0.02),
-			"sky_mid":    Color(0.18, 0.05, 0.02),
-			"sky_bottom": Color(0.28, 0.08, 0.02),
-			"grid_color": Color(0.72, 0.20, 0.04),
-			"sun_color":  Color(0.88, 0.45, 0.08),
+			"bg_style":      2,
+			"sky_top":       Color(0.07, 0.01, 0.03),
+			"sky_mid":       Color(0.18, 0.03, 0.04),
+			"sky_bottom":    Color(0.34, 0.08, 0.02),
+			"grid_color":    Color(0.95, 0.26, 0.06),
+			"sun_color":     Color(1.00, 0.62, 0.12),
+			"haze_color":    Color(0.22, 0.04, 0.02),
+			"horizon_color": Color(1.00, 0.84, 0.28),
 		},
-		"accent":  Color(0.88, 0.38, 0.06),
-		"accent2": Color(0.82, 0.16, 0.16),
+		"accent":  Color(1.00, 0.44, 0.08),
+		"accent2": Color(0.95, 0.18, 0.22),
 	},
 	{
 		"id": "forest", "name": "FOREST", "unlock_score": 0,
+		"subtitle": "CYBER ARCADIA • HOLO PRISM & AURORA MATRIX",
 		"board": {
-			"up":    Color(0.14, 0.55, 0.18, 1.0),   # Forest Green
-			"down":  Color(0.62, 0.30, 0.08, 1.0),   # Earth Brown
-			"left":  Color(0.22, 0.52, 0.80, 1.0),   # Sky Blue
-			"right": Color(0.80, 0.66, 0.12, 1.0),   # Harvest Gold
+			"up":    Color(0.14, 0.88, 0.42, 1.0),   # Vectrex Emerald
+			"down":  Color(0.94, 0.52, 0.16, 1.0),   # Amber Terminal
+			"left":  Color(0.16, 0.76, 0.92, 1.0),   # Holo Cyan
+			"right": Color(0.84, 0.94, 0.20, 1.0),   # Laser Chartreuse
 		},
 		"bg": {
-			"sky_top":    Color(0.02, 0.07, 0.02),
-			"sky_mid":    Color(0.04, 0.12, 0.04),
-			"sky_bottom": Color(0.06, 0.18, 0.06),
-			"grid_color": Color(0.14, 0.46, 0.18),
-			"sun_color":  Color(0.55, 0.70, 0.22),
+			"bg_style":      3,
+			"sky_top":       Color(0.01, 0.06, 0.04),
+			"sky_mid":       Color(0.02, 0.13, 0.09),
+			"sky_bottom":    Color(0.04, 0.22, 0.14),
+			"grid_color":    Color(0.12, 0.82, 0.45),
+			"sun_color":     Color(0.42, 0.98, 0.58),
+			"haze_color":    Color(0.02, 0.16, 0.10),
+			"horizon_color": Color(0.25, 0.95, 0.88),
 		},
-		"accent":  Color(0.20, 0.62, 0.24),
-		"accent2": Color(0.80, 0.66, 0.12),
+		"accent":  Color(0.18, 0.88, 0.48),
+		"accent2": Color(0.84, 0.94, 0.20),
 	},
 	{
 		"id": "midnight", "name": "MIDNIGHT", "unlock_score": 0,
+		"subtitle": "GALAXY ODYSSEY • RINGED SATURN & STARBRIDGE",
 		"board": {
-			"up":    Color(0.44, 0.30, 0.82, 1.0),   # Soft Indigo
-			"down":  Color(0.76, 0.36, 0.48, 1.0),   # Dusty Rose
-			"left":  Color(0.78, 0.68, 0.28, 1.0),   # Warm Gold
-			"right": Color(0.22, 0.60, 0.65, 1.0),   # Muted Teal
+			"up":    Color(0.54, 0.36, 0.98, 1.0),   # Cosmic Ultraviolet
+			"down":  Color(0.95, 0.36, 0.64, 1.0),   # Nebula Rose
+			"left":  Color(0.98, 0.80, 0.28, 1.0),   # Starlight Gold
+			"right": Color(0.22, 0.82, 0.96, 1.0),   # Pulsar Cyan
 		},
 		"bg": {
-			"sky_top":    Color(0.02, 0.02, 0.08),
-			"sky_mid":    Color(0.05, 0.04, 0.16),
-			"sky_bottom": Color(0.08, 0.06, 0.24),
-			"grid_color": Color(0.28, 0.22, 0.62),
-			"sun_color":  Color(0.42, 0.35, 0.80),
+			"bg_style":      4,
+			"sky_top":       Color(0.02, 0.01, 0.08),
+			"sky_mid":       Color(0.06, 0.03, 0.18),
+			"sky_bottom":    Color(0.13, 0.05, 0.28),
+			"grid_color":    Color(0.46, 0.28, 0.92),
+			"sun_color":     Color(0.72, 0.46, 1.00),
+			"haze_color":    Color(0.10, 0.03, 0.20),
+			"horizon_color": Color(0.98, 0.42, 0.76),
 		},
-		"accent":  Color(0.44, 0.35, 0.82),
-		"accent2": Color(0.76, 0.36, 0.48),
+		"accent":  Color(0.58, 0.40, 0.98),
+		"accent2": Color(0.95, 0.38, 0.66),
 	},
 ]
 

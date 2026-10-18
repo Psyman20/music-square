@@ -130,6 +130,12 @@ var _panel_style: StyleBoxFlat
 var _center_panel_style: StyleBoxFlat
 var _pause_panel_style: StyleBoxFlat
 var _btn_style: StyleBoxFlat
+var _menu_btn_style: StyleBoxFlat
+var _menu_btn_hover_style: StyleBoxFlat
+var _play_btn_style: StyleBoxFlat
+var _play_btn_hover_style: StyleBoxFlat
+var _leaderboard_btn_style: StyleBoxFlat
+var _leaderboard_btn_hover_style: StyleBoxFlat
 var _last_displayed_lives: int = GameSettings.MAX_LIVES
 var _heart_throb_tween: Tween
 var _lives_bezel_style: StyleBoxFlat
@@ -331,8 +337,12 @@ func _ready() -> void:
 	# Leaderboard UI (LEADERBOARD button on menu).
 	_setup_leaderboard_ui()
 
-	# Compact menu button spacing so all 7 buttons + Sparks pill fit cleanly
+	# Compact menu button spacing so all 8 buttons fit cleanly and scale across devices
 	_layout_menu_buttons()
+	if not resized.is_connected(_layout_menu_buttons):
+		resized.connect(_layout_menu_buttons)
+	if menu_screen != null and not menu_screen.resized.is_connected(_layout_menu_buttons):
+		menu_screen.resized.connect(_layout_menu_buttons)
 
 	# Sync existing high score to leaderboard if returning player has a previous record
 	if not _tamper_flagged and settings != null and settings.high_score > 0:
@@ -373,11 +383,16 @@ func _theme_accent2() -> Color:
 
 
 func _apply_theme_bg_colors() -> void:
-	if _bg_shader_mat == null:
-		return
-	var bg: Dictionary = _get_theme().get("bg", {})
-	for key: String in bg:
-		_bg_shader_mat.set_shader_parameter(key, bg[key])
+	var th: Dictionary = _get_theme()
+	var bg: Dictionary = th.get("bg", {})
+	if _bg_shader_mat != null:
+		for key: String in bg:
+			_bg_shader_mat.set_shader_parameter(key, bg[key])
+	if _ambient_particles != null and is_instance_valid(_ambient_particles):
+		var amat := _ambient_particles.process_material as ParticleProcessMaterial
+		if amat != null:
+			var sun_c: Color = bg.get("sun_color", th.get("accent", Color(1.0, 0.6, 0.95)))
+			amat.color = Color(sun_c.r, sun_c.g, sun_c.b, 0.62)
 
 
 func _create_styles() -> void:
@@ -405,6 +420,57 @@ func _create_styles() -> void:
 	_btn_style.bg_color = Color(0.12, 0.09, 0.22, 0.85)
 	_btn_style.set_border_width_all(2)
 	_btn_style.set_shadow_size(6)
+
+	# Uniform rounded Menu Button style (Missions, Songs, Themes, Shop, Badges, Options)
+	_menu_btn_style = StyleBoxFlat.new()
+	_menu_btn_style.set_corner_radius_all(16)
+	_menu_btn_style.bg_color = Color(1.0, 0.278, 0.341, 0.25)
+	_menu_btn_style.set_border_width_all(2)
+	_menu_btn_style.set_border_color(Color(1.0, 0.38, 0.46, 0.55))
+	_menu_btn_style.set_shadow_color(Color(1.0, 0.278, 0.341, 0.20))
+	_menu_btn_style.set_shadow_size(6)
+
+	_menu_btn_hover_style = StyleBoxFlat.new()
+	_menu_btn_hover_style.set_corner_radius_all(16)
+	_menu_btn_hover_style.bg_color = Color(1.0, 0.278, 0.341, 0.38)
+	_menu_btn_hover_style.set_border_width_all(2)
+	_menu_btn_hover_style.set_border_color(Color(1.0, 0.65, 0.72, 0.92))
+	_menu_btn_hover_style.set_shadow_color(Color(1.0, 0.278, 0.341, 0.42))
+	_menu_btn_hover_style.set_shadow_size(10)
+
+	# Rounded Play Button style
+	_play_btn_style = StyleBoxFlat.new()
+	_play_btn_style.set_corner_radius_all(16)
+	_play_btn_style.bg_color = Color(0.85, 0.12, 0.38, 0.90)
+	_play_btn_style.set_border_width_all(2)
+	_play_btn_style.set_border_color(Color(1.0, 0.45, 0.65, 0.85))
+	_play_btn_style.set_shadow_color(Color(0.85, 0.12, 0.38, 0.45))
+	_play_btn_style.set_shadow_size(8)
+
+	_play_btn_hover_style = StyleBoxFlat.new()
+	_play_btn_hover_style.set_corner_radius_all(16)
+	_play_btn_hover_style.bg_color = Color(0.95, 0.18, 0.44, 0.95)
+	_play_btn_hover_style.set_border_width_all(2)
+	_play_btn_hover_style.set_border_color(Color(1.0, 0.75, 0.85, 1.0))
+	_play_btn_hover_style.set_shadow_color(Color(0.95, 0.18, 0.44, 0.65))
+	_play_btn_hover_style.set_shadow_size(12)
+
+	# Rounded Leaderboard Button style
+	_leaderboard_btn_style = StyleBoxFlat.new()
+	_leaderboard_btn_style.set_corner_radius_all(16)
+	_leaderboard_btn_style.bg_color = Color(0.18, 0.80, 0.44, 0.24)
+	_leaderboard_btn_style.set_border_width_all(2)
+	_leaderboard_btn_style.set_border_color(Color(0.25, 0.90, 0.52, 0.55))
+	_leaderboard_btn_style.set_shadow_color(Color(0.18, 0.80, 0.44, 0.20))
+	_leaderboard_btn_style.set_shadow_size(6)
+
+	_leaderboard_btn_hover_style = StyleBoxFlat.new()
+	_leaderboard_btn_hover_style.set_corner_radius_all(16)
+	_leaderboard_btn_hover_style.bg_color = Color(0.18, 0.80, 0.44, 0.36)
+	_leaderboard_btn_hover_style.set_border_width_all(2)
+	_leaderboard_btn_hover_style.set_border_color(Color(0.45, 1.0, 0.68, 0.92))
+	_leaderboard_btn_hover_style.set_shadow_color(Color(0.18, 0.80, 0.44, 0.42))
+	_leaderboard_btn_hover_style.set_shadow_size(10)
 
 	_apply_style_colors()
 
@@ -888,7 +954,9 @@ func _apply_panel_styles() -> void:
 
 func _setup_button_styles() -> void:
 	var accent := _theme_accent()
-	var buttons := [start_button, resume_btn, restart_btn, pause_menu_btn, retry_btn, leaderboard_btn, share_score_btn, rate_app_btn, go_menu_btn, pause_button, revive_btn, tutorial_understood_btn]
+	if start_button != null and is_instance_valid(start_button):
+		_apply_menu_button_style(start_button, _play_btn_style, _play_btn_hover_style)
+	var buttons := [resume_btn, restart_btn, pause_menu_btn, retry_btn, leaderboard_btn, share_score_btn, rate_app_btn, go_menu_btn, pause_button, revive_btn, tutorial_understood_btn]
 	for btn: Button in buttons:
 		if btn == null or not is_instance_valid(btn):
 			continue
@@ -900,6 +968,22 @@ func _setup_button_styles() -> void:
 		btn.add_theme_stylebox_override("hover", hover)
 		btn.add_theme_stylebox_override("pressed", hover)
 		btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+
+
+func _apply_menu_button_style(btn: Button, normal_style: StyleBoxFlat = null, hover_style: StyleBoxFlat = null) -> void:
+	if btn == null or not is_instance_valid(btn):
+		return
+	var n_style: StyleBoxFlat = normal_style if normal_style != null else _menu_btn_style
+	var h_style: StyleBoxFlat = hover_style if hover_style != null else _menu_btn_hover_style
+	btn.flat = false
+	btn.add_theme_color_override("font_color", Color(1, 1, 1, 1))
+	btn.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))
+	btn.add_theme_color_override("font_pressed_color", Color(1, 1, 1, 1))
+	btn.add_theme_color_override("font_focus_color", Color(1, 1, 1, 1))
+	btn.add_theme_stylebox_override("normal", n_style)
+	btn.add_theme_stylebox_override("hover", h_style)
+	btn.add_theme_stylebox_override("pressed", h_style)
+	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 
 
 func _connect_signals() -> void:
@@ -1111,26 +1195,15 @@ func _setup_songs_ui() -> void:
 	_songs_button = Button.new()
 	_songs_button.name = "SongsButton"
 	_songs_button.text = "SONGS"
-	_songs_button.flat = true
 	_songs_button.anchor_left = 0.5
 	_songs_button.anchor_right = 0.5
 	_songs_button.offset_left = -120.0
 	_songs_button.offset_right = 120.0
-	_songs_button.offset_top = 525.0
-	_songs_button.offset_bottom = 580.0
-	_songs_button.add_theme_font_size_override("font_size", 28)
-	_songs_button.add_theme_color_override("font_color", Color(1, 1, 1, 1))
-	_songs_button.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))
-	_songs_button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	_songs_button.offset_top = 488.0
+	_songs_button.offset_bottom = 536.0
+	_songs_button.add_theme_font_size_override("font_size", 25)
+	_apply_menu_button_style(_songs_button)
 	_songs_button.pressed.connect(_open_songs_screen)
-	var songs_bg := ColorRect.new()
-	songs_bg.name = "SongsButtonBg"
-	songs_bg.anchor_right = 1.0
-	songs_bg.anchor_bottom = 1.0
-	songs_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	songs_bg.color = Color(1, 0.278, 0.341, 0.25)
-	_songs_button.add_child(songs_bg)
-	_songs_button.move_child(songs_bg, 0)
 	menu_screen.add_child(_songs_button)
 
 	# --- Songs selection overlay screen ---
@@ -1363,26 +1436,15 @@ func _setup_themes_ui() -> void:
 	_themes_button = Button.new()
 	_themes_button.name = "ThemesButton"
 	_themes_button.text = "THEMES"
-	_themes_button.flat = true
 	_themes_button.anchor_left = 0.5
 	_themes_button.anchor_right = 0.5
 	_themes_button.offset_left = -120.0
 	_themes_button.offset_right = 120.0
-	_themes_button.offset_top = 590.0
-	_themes_button.offset_bottom = 645.0
-	_themes_button.add_theme_font_size_override("font_size", 28)
-	_themes_button.add_theme_color_override("font_color", Color(1, 1, 1, 1))
-	_themes_button.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))
-	_themes_button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	_themes_button.offset_top = 546.0
+	_themes_button.offset_bottom = 594.0
+	_themes_button.add_theme_font_size_override("font_size", 25)
+	_apply_menu_button_style(_themes_button)
 	_themes_button.pressed.connect(_open_themes_screen)
-	var themes_bg := ColorRect.new()
-	themes_bg.name = "ThemesButtonBg"
-	themes_bg.anchor_right = 1.0
-	themes_bg.anchor_bottom = 1.0
-	themes_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	themes_bg.color = Color(1, 0.278, 0.341, 0.25)
-	_themes_button.add_child(themes_bg)
-	_themes_button.move_child(themes_bg, 0)
 	menu_screen.add_child(_themes_button)
 
 	# --- Themes selection overlay screen ---
@@ -1500,47 +1562,149 @@ func _refresh_themes_screen() -> void:
 func _build_theme_row(theme_def: Dictionary) -> Button:
 	var theme_id: String = str(theme_def.get("id", ""))
 	var theme_name: String = str(theme_def.get("name", "?"))
+	var subtitle: String = str(theme_def.get("subtitle", ""))
 	var unlock: int = int(theme_def.get("unlock_score", 0))
 	var unlocked: bool = settings.is_theme_unlocked(theme_def)
 	var selected: bool = theme_id == settings.selected_theme
+	var accent_col: Color = theme_def.get("accent", Color(0.9, 0.3, 0.6))
+	var bg_dict: Dictionary = theme_def.get("bg", {})
 
 	var btn := Button.new()
-	btn.custom_minimum_size = Vector2(0, 64)
-	btn.alignment = HORIZONTAL_ALIGNMENT_CENTER
-	btn.add_theme_font_size_override("font_size", 20)
+	btn.custom_minimum_size = Vector2(0, 74)
+	btn.clip_contents = true
+	btn.text = ""
 
 	if not unlocked:
 		btn.disabled = true
-		btn.text = theme_name + "\nUNLOCK AT SCORE " + str(unlock)
-		btn.add_theme_color_override("font_color", Color(1.0, 0.85, 0.85, 1.0))
-		btn.add_theme_color_override("font_disabled_color", Color(1.0, 0.85, 0.85, 1.0))
 		var locked_style := _btn_style.duplicate()
-		locked_style.bg_color = Color(0.45, 0.08, 0.10, 0.85)
+		locked_style.bg_color = Color(0.32, 0.06, 0.10, 0.85)
 		locked_style.set_border_color(Color(1.0, 0.3, 0.35, 0.7))
 		locked_style.set_shadow_color(Color(0.8, 0.1, 0.15, 0.4))
 		locked_style.set_shadow_size(6)
 		btn.add_theme_stylebox_override("normal", locked_style)
 		btn.add_theme_stylebox_override("disabled", locked_style)
 	else:
-		btn.text = (">  " + theme_name) if selected else theme_name
-		var text_color := Color(1.0, 0.9, 0.35) if selected else Color(0.9, 0.95, 1.0)
-		btn.add_theme_color_override("font_color", text_color)
-		btn.add_theme_color_override("font_hover_color", Color(1, 1, 1))
 		var row_style := _btn_style.duplicate()
+		var sky_mid: Color = bg_dict.get("sky_mid", Color(0.12, 0.09, 0.22))
+		row_style.bg_color = Color(sky_mid.r * 0.85 + 0.04, sky_mid.g * 0.85 + 0.03, sky_mid.b * 0.85 + 0.06, 0.92)
 		if selected:
-			row_style.set_border_color(Color(1.0, 0.85, 0.2, 0.9))
-			row_style.set_shadow_color(Color(1.0, 0.8, 0.1, 0.4))
+			row_style.set_border_width_all(3)
+			row_style.set_border_color(Color(1.0, 0.88, 0.25, 0.98))
+			row_style.set_shadow_color(Color(accent_col.r, accent_col.g, accent_col.b, 0.55))
+			row_style.set_shadow_size(10)
+		else:
+			row_style.set_border_width_all(2)
+			row_style.set_border_color(Color(accent_col.r, accent_col.g, accent_col.b, 0.72))
+			row_style.set_shadow_color(Color(accent_col.r, accent_col.g, accent_col.b, 0.28))
+			row_style.set_shadow_size(6)
 		btn.add_theme_stylebox_override("normal", row_style)
 		var r_hover := row_style.duplicate()
-		r_hover.set_border_color(Color(1, 1, 1, 0.9))
-		r_hover.set_shadow_color(Color(1, 1, 1, 0.5))
-		r_hover.set_shadow_size(8)
+		r_hover.set_border_color(Color(1, 1, 1, 0.95))
+		r_hover.set_shadow_color(Color(accent_col.r, accent_col.g, accent_col.b, 0.65))
+		r_hover.set_shadow_size(10)
 		btn.add_theme_stylebox_override("hover", r_hover)
 		btn.add_theme_stylebox_override("pressed", r_hover)
 		btn.pressed.connect(_select_theme.bind(theme_id))
 
+	# 1. Left Retro Scene Preview Emblem
+	var preview_ctrl := Control.new()
+	preview_ctrl.name = "ThemePreview"
+	preview_ctrl.position = Vector2(12.0, 13.0)
+	preview_ctrl.size = Vector2(48.0, 48.0)
+	preview_ctrl.custom_minimum_size = Vector2(48.0, 48.0)
+	preview_ctrl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	preview_ctrl.draw.connect(_draw_theme_preview_badge.bind(preview_ctrl, theme_def))
+	btn.add_child(preview_ctrl)
+
+	# 2. Title & Retro Subtitle
+	var name_lbl := Label.new()
+	name_lbl.text = ("> " + theme_name) if selected else theme_name
+	name_lbl.anchor_right = 1.0
+	name_lbl.offset_left = 70.0
+	name_lbl.offset_right = -78.0
+	name_lbl.offset_top = 12.0
+	name_lbl.offset_bottom = 38.0
+	name_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	name_lbl.add_theme_font_size_override("font_size", 19)
+	name_lbl.add_theme_color_override("font_color", Color(1.0, 0.92, 0.35) if selected else Color(0.96, 0.98, 1.0))
+	name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	btn.add_child(name_lbl)
+
+	var sub_lbl := Label.new()
+	sub_lbl.text = ("UNLOCK AT SCORE " + str(unlock)) if not unlocked else subtitle
+	sub_lbl.anchor_right = 1.0
+	sub_lbl.offset_left = 70.0
+	sub_lbl.offset_right = -78.0
+	sub_lbl.offset_top = 40.0
+	sub_lbl.offset_bottom = 62.0
+	sub_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	sub_lbl.clip_text = true
+	sub_lbl.add_theme_font_size_override("font_size", 10)
+	sub_lbl.add_theme_color_override("font_color", Color(0.85, 0.88, 0.96, 0.85))
+	sub_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	btn.add_child(sub_lbl)
+
 	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	return btn
+
+
+func _draw_theme_preview_badge(ctrl: Control, theme_def: Dictionary) -> void:
+	var s: Vector2 = ctrl.size
+	var c: Vector2 = s * 0.5
+	var bg_dict: Dictionary = theme_def.get("bg", {})
+	var board_dict: Dictionary = theme_def.get("board", {})
+	var style_idx: int = int(bg_dict.get("bg_style", 0))
+	var sky_top: Color = bg_dict.get("sky_top", Color(0.05, 0.02, 0.14))
+	var sky_bot: Color = bg_dict.get("sky_bottom", Color(0.32, 0.06, 0.30))
+	var sun_col: Color = bg_dict.get("sun_color", Color(1.0, 0.4, 0.6))
+	var grid_col: Color = bg_dict.get("grid_color", Color(0.9, 0.2, 0.8))
+	var hor_col: Color = bg_dict.get("horizon_color", Color(0.2, 0.9, 1.0))
+
+	# Circular retro window backdrop
+	ctrl.draw_circle(c, 22.0, sky_top.lerp(sky_bot, 0.55))
+	var hy: float = c.y + 4.0
+
+	if style_idx == 0:
+		# SYNTHWAVE: Outrun sun + wireframe mountain peak
+		ctrl.draw_circle(c + Vector2(0, -4), 9.5, sun_col)
+		var pk := PackedVector2Array([Vector2(c.x - 16, hy), Vector2(c.x - 5, hy - 9), Vector2(c.x + 3, hy - 3), Vector2(c.x + 11, hy - 10), Vector2(c.x + 17, hy)])
+		ctrl.draw_colored_polygon(pk, sky_top)
+		ctrl.draw_polyline(pk, hor_col, 1.5, true)
+	elif style_idx == 1:
+		# OCEAN: Crescent moon + neon waves
+		ctrl.draw_circle(c + Vector2(-1, -5), 8.5, sun_col)
+		ctrl.draw_circle(c + Vector2(2.5, -7), 7.0, sky_top.lerp(sky_bot, 0.4))
+		ctrl.draw_line(Vector2(c.x - 12, hy + 5), Vector2(c.x + 12, hy + 5), grid_col, 1.8)
+		ctrl.draw_line(Vector2(c.x - 8, hy + 9), Vector2(c.x + 8, hy + 9), hor_col, 1.8)
+	elif style_idx == 2:
+		# EMBER: Solar eclipse ring + skyline
+		ctrl.draw_arc(c + Vector2(0, -5), 8.5, 0.0, TAU, 24, sun_col, 2.6, true)
+		ctrl.draw_circle(c + Vector2(0, -5), 6.2, sky_top)
+		ctrl.draw_rect(Rect2(c.x - 13, hy - 6, 5, 6), sky_top, true)
+		ctrl.draw_rect(Rect2(c.x + 7, hy - 8, 6, 8), sky_top, true)
+	elif style_idx == 3:
+		# FOREST: Wireframe holo-diamond + aurora
+		var dm := PackedVector2Array([c + Vector2(0, -14), c + Vector2(8, -5), c + Vector2(0, 3), c + Vector2(-8, -5), c + Vector2(0, -14)])
+		ctrl.draw_polyline(dm, sun_col, 1.8, true)
+		ctrl.draw_line(c + Vector2(0, -14), c + Vector2(0, 3), hor_col, 1.2)
+	else:
+		# MIDNIGHT: Tilted ringed Saturn planet
+		ctrl.draw_circle(c + Vector2(0, -4), 6.5, sun_col)
+		ctrl.draw_line(c + Vector2(-13, 0), c + Vector2(13, -8), hor_col, 2.2, true)
+
+	# Horizon laser line
+	ctrl.draw_line(Vector2(c.x - 17, hy), Vector2(c.x + 17, hy), grid_col, 1.6)
+	# Outer neon ring frame
+	ctrl.draw_arc(c, 22.0, 0.0, TAU, 32, grid_col, 2.0, true)
+
+	# 4 mini board color dots on the right side of the button (drawn relative to ctrl)
+	var dirs := ["up", "right", "down", "left"]
+	for i in range(4):
+		var d_col: Color = board_dict.get(dirs[i], Color.WHITE)
+		var dx: float = 304.0 + float(i % 2) * 16.0
+		var dy: float = 10.0 + float(i >> 1) * 16.0
+		ctrl.draw_rect(Rect2(dx, dy, 11.0, 11.0), d_col, true)
+		ctrl.draw_rect(Rect2(dx, dy, 11.0, 11.0), Color(1, 1, 1, 0.75), false, 1.0)
 
 
 # =====================================================
@@ -1656,83 +1820,126 @@ func _draw_shop_item_preview(ctrl: Control, category: String, item_id: String, c
 
 
 func _layout_menu_buttons() -> void:
-	# Arrange the menu buttons and top Sparks balance pill cleanly with zero overlap
-	if start_button != null and is_instance_valid(start_button):
-		start_button.offset_top = 456.0
-		start_button.offset_bottom = 508.0
-	if _songs_button != null and is_instance_valid(_songs_button):
-		_songs_button.offset_top = 516.0
-		_songs_button.offset_bottom = 564.0
-		_songs_button.add_theme_font_size_override("font_size", 25)
-	if _themes_button != null and is_instance_valid(_themes_button):
-		_themes_button.offset_top = 572.0
-		_themes_button.offset_bottom = 620.0
-		_themes_button.add_theme_font_size_override("font_size", 25)
-	if _shop_button != null and is_instance_valid(_shop_button):
-		_shop_button.offset_top = 628.0
-		_shop_button.offset_bottom = 676.0
-		_shop_button.add_theme_font_size_override("font_size", 25)
-	if _badges_button != null and is_instance_valid(_badges_button):
-		_badges_button.offset_top = 684.0
-		_badges_button.offset_bottom = 732.0
-		_badges_button.add_theme_font_size_override("font_size", 25)
-	if _leaderboard_button != null and is_instance_valid(_leaderboard_button):
-		_leaderboard_button.offset_top = 740.0
-		_leaderboard_button.offset_bottom = 788.0
-		_leaderboard_button.add_theme_font_size_override("font_size", 22)
-	if _options_button != null and is_instance_valid(_options_button):
-		_options_button.offset_top = 796.0
-		_options_button.offset_bottom = 844.0
-		_options_button.add_theme_font_size_override("font_size", 25)
+	# Dynamically scale and position the Title and all 8 Menu Buttons so they fit cleanly
+	# with generous space between the title and the buttons across any device resolution/aspect ratio.
+	var vp_size: Vector2 = size
+	if vp_size.x <= 1.0 or vp_size.y <= 1.0:
+		vp_size = get_viewport_rect().size
+	if vp_size.x <= 1.0 or vp_size.y <= 1.0:
+		vp_size = Vector2(540.0, 960.0)
+
+	var vw: float = maxf(320.0, vp_size.x)
+	var vh: float = maxf(640.0, vp_size.y)
+	var w_scale: float = vw / 540.0
+	var h_scale: float = vh / 960.0
+	var ui_scale: float = clampf(minf(w_scale, h_scale), 0.75, 1.30)
+
+	var btn_w: float = roundf(clampf(240.0 * ui_scale, 200.0, vw * 0.72))
+	var half_w: float = roundf(btn_w * 0.5)
+	var btn_h: float = roundf(clampf(48.0 * h_scale, 40.0, 56.0))
+	var btn_gap: float = roundf(clampf(vh * 0.0105, 8.0, 15.0))
+
+	var menu_buttons: Array[Button] = [
+		_menu_sparks_btn,
+		start_button,
+		_songs_button,
+		_themes_button,
+		_shop_button,
+		_badges_button,
+		_leaderboard_button,
+		_options_button,
+	]
+	var valid_btns: Array[Button] = []
+	for btn: Button in menu_buttons:
+		if btn != null and is_instance_valid(btn):
+			valid_btns.append(btn)
+
+	var num_btns: int = maxi(1, valid_btns.size())
+	var total_btns_h: float = float(num_btns) * btn_h + float(num_btns - 1) * btn_gap
+
+	var title1_h: float = roundf(92.0 * ui_scale)
+	var title2_h: float = roundf(114.0 * ui_scale)
+	var title_overlap: float = roundf(16.0 * ui_scale)
+	var title_block_h: float = title1_h + title2_h - title_overlap
+
+	var bottom_version_reserve: float = roundf(48.0 * ui_scale)
+	var usable_h: float = vh - bottom_version_reserve
+	var remaining_h: float = maxf(60.0, usable_h - title_block_h - total_btns_h)
+
+	var top_margin: float = roundf(remaining_h * 0.34)
+	var title_to_btns_gap: float = roundf(remaining_h * 0.36)
+
+	var title1 := $MenuScreen/TitleLabel as Label
+	if title1 != null and is_instance_valid(title1):
+		title1.offset_top = top_margin
+		title1.offset_bottom = top_margin + title1_h
+		title1.add_theme_font_size_override("font_size", int(roundf(62.0 * ui_scale)))
+		title1.pivot_offset = Vector2(300.0, title1_h * 0.5)
+
+	var title2_top: float = top_margin + title1_h - title_overlap
+	var title2_bottom: float = title2_top + title2_h
+	var title2 := $MenuScreen/TitleLabel2 as Label
+	if title2 != null and is_instance_valid(title2):
+		title2.offset_top = title2_top
+		title2.offset_bottom = title2_bottom
+		title2.add_theme_font_size_override("font_size", int(roundf(86.0 * ui_scale)))
+		title2.pivot_offset = Vector2(300.0, title2_h * 0.5)
+
+	var cur_y: float = roundf(title2_bottom + title_to_btns_gap)
+	var std_font_size: int = int(roundf(25.0 * ui_scale))
+	var play_font_size: int = int(roundf(30.0 * ui_scale))
+	var lb_font_size: int = int(roundf(21.0 * ui_scale))
+
+	for btn: Button in valid_btns:
+		btn.offset_left = -half_w
+		btn.offset_right = half_w
+		btn.offset_top = cur_y
+		btn.offset_bottom = cur_y + btn_h
+		if btn == start_button:
+			btn.add_theme_font_size_override("font_size", play_font_size)
+		elif btn == _leaderboard_button:
+			btn.add_theme_font_size_override("font_size", lb_font_size)
+		elif btn != _menu_sparks_btn:
+			btn.add_theme_font_size_override("font_size", std_font_size)
+		cur_y += btn_h + btn_gap
+
+	_update_sparks_displays()
 
 
 func _setup_shop_ui() -> void:
-	# 1. Top Sparks & Daily Missions Pill on MenuScreen (fixed 280px width, clip_contents = true)
+	# 1. Daily Missions & Sparks Button on MenuScreen (same size & rounded look as the rest of the menu buttons)
 	_menu_sparks_btn = Button.new()
 	_menu_sparks_btn.name = "MenuSparksPill"
 	_menu_sparks_btn.text = ""
 	_menu_sparks_btn.clip_contents = true
 	_menu_sparks_btn.anchor_left = 0.5
 	_menu_sparks_btn.anchor_right = 0.5
-	_menu_sparks_btn.offset_left = -140.0
-	_menu_sparks_btn.offset_right = 140.0
-	_menu_sparks_btn.offset_top = 410.0
-	_menu_sparks_btn.offset_bottom = 446.0
-	_menu_sparks_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-	var pill_style := StyleBoxFlat.new()
-	pill_style.set_corner_radius_all(18)
-	pill_style.bg_color = Color(0.10, 0.08, 0.20, 0.92)
-	pill_style.set_border_width_all(2)
-	pill_style.set_border_color(Color(1.0, 0.85, 0.20, 0.85))
-	pill_style.set_shadow_color(Color(1.0, 0.75, 0.10, 0.35))
-	pill_style.set_shadow_size(8)
-	_menu_sparks_btn.add_theme_stylebox_override("normal", pill_style)
-	var pill_hover := pill_style.duplicate()
-	pill_hover.set_border_color(Color(1.0, 0.95, 0.45, 1.0))
-	pill_hover.set_shadow_size(12)
-	_menu_sparks_btn.add_theme_stylebox_override("hover", pill_hover)
-	_menu_sparks_btn.add_theme_stylebox_override("pressed", pill_hover)
+	_menu_sparks_btn.offset_left = -120.0
+	_menu_sparks_btn.offset_right = 120.0
+	_menu_sparks_btn.offset_top = 372.0
+	_menu_sparks_btn.offset_bottom = 420.0
+	_apply_menu_button_style(_menu_sparks_btn)
 	_menu_sparks_btn.pressed.connect(_open_missions_screen)
 
 	var pill_hbox := HBoxContainer.new()
 	pill_hbox.name = "PillContent"
 	pill_hbox.anchor_right = 1.0
 	pill_hbox.anchor_bottom = 1.0
-	pill_hbox.offset_left = 10.0
-	pill_hbox.offset_right = -10.0
+	pill_hbox.offset_left = 8.0
+	pill_hbox.offset_right = -8.0
 	pill_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	pill_hbox.add_theme_constant_override("separation", 6)
+	pill_hbox.add_theme_constant_override("separation", 5)
 	pill_hbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_menu_sparks_btn.add_child(pill_hbox)
 
-	pill_hbox.add_child(_create_spark_icon(18.0, Color(1.0, 0.92, 0.25)))
+	pill_hbox.add_child(_create_spark_icon(17.0, Color(1.0, 0.92, 0.25)))
 
 	_menu_sparks_label = Label.new()
 	_menu_sparks_label.name = "MenuSparksLabel"
 	_menu_sparks_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_menu_sparks_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_menu_sparks_label.add_theme_font_size_override("font_size", 12)
-	_menu_sparks_label.add_theme_color_override("font_color", Color(1.0, 0.92, 0.28))
+	_menu_sparks_label.add_theme_font_size_override("font_size", 13)
+	_menu_sparks_label.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 1.0))
 	_menu_sparks_label.add_theme_color_override("font_outline_color", Color(0.06, 0.03, 0.14, 1.0))
 	_menu_sparks_label.add_theme_constant_override("outline_size", 4)
 	_menu_sparks_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1744,26 +1951,15 @@ func _setup_shop_ui() -> void:
 	_shop_button = Button.new()
 	_shop_button.name = "ShopButton"
 	_shop_button.text = "SHOP"
-	_shop_button.flat = true
 	_shop_button.anchor_left = 0.5
 	_shop_button.anchor_right = 0.5
 	_shop_button.offset_left = -120.0
 	_shop_button.offset_right = 120.0
-	_shop_button.offset_top = 628.0
-	_shop_button.offset_bottom = 676.0
+	_shop_button.offset_top = 604.0
+	_shop_button.offset_bottom = 652.0
 	_shop_button.add_theme_font_size_override("font_size", 25)
-	_shop_button.add_theme_color_override("font_color", Color(1.0, 0.95, 0.45, 1.0))
-	_shop_button.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))
-	_shop_button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	_apply_menu_button_style(_shop_button)
 	_shop_button.pressed.connect(_open_shop_cosmetics_screen)
-	var shop_bg := ColorRect.new()
-	shop_bg.name = "ShopButtonBg"
-	shop_bg.anchor_right = 1.0
-	shop_bg.anchor_bottom = 1.0
-	shop_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	shop_bg.color = Color(0.95, 0.72, 0.12, 0.24)
-	_shop_button.add_child(shop_bg)
-	_shop_button.move_child(shop_bg, 0)
 	menu_screen.add_child(_shop_button)
 
 	# 3. Shop & Daily Missions overlay screen (matches exact 440px width of Songs/Themes/Badges panels)
@@ -2074,11 +2270,15 @@ func _update_sparks_displays() -> void:
 	if _menu_sparks_label != null and is_instance_valid(_menu_sparks_label):
 		var pill_txt := sp_compact + "  |  MISSIONS " + str(m_done) + "/" + str(m_total)
 		_menu_sparks_label.text = pill_txt
-		var f_size := 12
+		var btn_w: float = 240.0
+		if _menu_sparks_btn != null and is_instance_valid(_menu_sparks_btn):
+			btn_w = maxf(200.0, _menu_sparks_btn.offset_right - _menu_sparks_btn.offset_left)
+		var w_ratio: float = clampf(btn_w / 240.0, 0.85, 1.25)
+		var f_size: int = int(roundf(13.0 * w_ratio))
 		if pill_txt.length() > 21:
-			f_size = 10
+			f_size = int(roundf(11.0 * w_ratio))
 		elif pill_txt.length() > 18:
-			f_size = 11
+			f_size = int(roundf(12.0 * w_ratio))
 		_menu_sparks_label.add_theme_font_size_override("font_size", f_size)
 	if _shop_sparks_icon != null and is_instance_valid(_shop_sparks_icon):
 		_shop_sparks_icon.visible = true
@@ -2883,30 +3083,19 @@ func _on_shop_item_pressed(category: String, item_id: String, cost: int, item_na
 # =====================================================
 
 func _setup_options_ui() -> void:
-	# --- "OPTIONS" button under THEMES on the menu screen ---
+	# --- "OPTIONS" button under LEADERBOARD on the menu screen ---
 	_options_button = Button.new()
 	_options_button.name = "OptionsButton"
 	_options_button.text = "OPTIONS"
-	_options_button.flat = true
 	_options_button.anchor_left = 0.5
 	_options_button.anchor_right = 0.5
 	_options_button.offset_left = -120.0
 	_options_button.offset_right = 120.0
-	_options_button.offset_top = 785.0
-	_options_button.offset_bottom = 840.0
-	_options_button.add_theme_font_size_override("font_size", 28)
-	_options_button.add_theme_color_override("font_color", Color(1, 1, 1, 1))
-	_options_button.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))
-	_options_button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	_options_button.offset_top = 778.0
+	_options_button.offset_bottom = 826.0
+	_options_button.add_theme_font_size_override("font_size", 25)
+	_apply_menu_button_style(_options_button)
 	_options_button.pressed.connect(_open_options_screen)
-	var options_bg := ColorRect.new()
-	options_bg.name = "OptionsButtonBg"
-	options_bg.anchor_right = 1.0
-	options_bg.anchor_bottom = 1.0
-	options_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	options_bg.color = Color(1, 0.278, 0.341, 0.25)
-	_options_button.add_child(options_bg)
-	_options_button.move_child(options_bg, 0)
 	menu_screen.add_child(_options_button)
 
 	# --- Options overlay screen ---
@@ -4986,30 +5175,19 @@ func _draw_badge_icon(panel: Panel, icon_type: String, icon_color: Color) -> voi
 # =====================================================
 
 func _setup_badges_ui() -> void:
-	# --- "BADGES" button under OPTIONS on the menu screen ---
+	# --- "BADGES" button on the menu screen ---
 	_badges_button = Button.new()
 	_badges_button.name = "BadgesButton"
 	_badges_button.text = "BADGES"
-	_badges_button.flat = true
 	_badges_button.anchor_left = 0.5
 	_badges_button.anchor_right = 0.5
 	_badges_button.offset_left = -120.0
 	_badges_button.offset_right = 120.0
-	_badges_button.offset_top = 655.0
+	_badges_button.offset_top = 662.0
 	_badges_button.offset_bottom = 710.0
-	_badges_button.add_theme_font_size_override("font_size", 28)
-	_badges_button.add_theme_color_override("font_color", Color(1, 1, 1, 1))
-	_badges_button.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))
-	_badges_button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	_badges_button.add_theme_font_size_override("font_size", 25)
+	_apply_menu_button_style(_badges_button)
 	_badges_button.pressed.connect(_open_badges_screen)
-	var badges_bg := ColorRect.new()
-	badges_bg.name = "BadgesButtonBg"
-	badges_bg.anchor_right = 1.0
-	badges_bg.anchor_bottom = 1.0
-	badges_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	badges_bg.color = Color(1.0, 0.85, 0.15, 0.20)
-	_badges_button.add_child(badges_bg)
-	_badges_button.move_child(badges_bg, 0)
 	menu_screen.add_child(_badges_button)
 
 	# --- Badges overlay screen ---
@@ -5237,27 +5415,15 @@ func _setup_leaderboard_ui() -> void:
 	_leaderboard_button = Button.new()
 	_leaderboard_button.name = "LeaderboardButton"
 	_leaderboard_button.text = "LEADERBOARD"
-	_leaderboard_button.flat = true
 	_leaderboard_button.anchor_left = 0.5
 	_leaderboard_button.anchor_right = 0.5
 	_leaderboard_button.offset_left = -120.0
 	_leaderboard_button.offset_right = 120.0
 	_leaderboard_button.offset_top = 720.0
-	_leaderboard_button.offset_bottom = 775.0
-	_leaderboard_button.add_theme_font_size_override("font_size", 24)
-	_leaderboard_button.add_theme_color_override("font_color", Color(1, 1, 1, 1))
-	_leaderboard_button.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))
-	_leaderboard_button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	_leaderboard_button.offset_bottom = 768.0
+	_leaderboard_button.add_theme_font_size_override("font_size", 21)
+	_apply_menu_button_style(_leaderboard_button, _leaderboard_btn_style, _leaderboard_btn_hover_style)
 	_leaderboard_button.pressed.connect(_on_leaderboard_pressed)
-
-	var lb_bg := ColorRect.new()
-	lb_bg.name = "LeaderboardButtonBg"
-	lb_bg.anchor_right = 1.0
-	lb_bg.anchor_bottom = 1.0
-	lb_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	lb_bg.color = Color(0.18, 0.80, 0.44, 0.22)
-	_leaderboard_button.add_child(lb_bg)
-	_leaderboard_button.move_child(lb_bg, 0)
 	menu_screen.add_child(_leaderboard_button)
 
 
@@ -7906,22 +8072,22 @@ func _style_menu_neon() -> void:
 	_animate_title_popup(title, 0.0)
 	_animate_title_popup(title2, 0.12)
 
-	# Neon-tube PLAY button: darker fill + bright legible text.
+	# Neon-tube PLAY button: darker fill + bright legible text on rounded stylebox.
 	var play_bg := $MenuScreen/StartButton/StartButtonBg
 	if play_bg is ColorRect:
-		play_bg.color = Color(0.85, 0.12, 0.38, 0.9)
+		play_bg.visible = false
 	var start_btn := $MenuScreen/StartButton
 	if start_btn is Button:
 		start_btn.add_theme_color_override("font_color", Color(1.2, 1.2, 1.3))
 		start_btn.add_theme_constant_override("outline_size", 6)
 		start_btn.add_theme_color_override("font_outline_color", Color(0.2, 0.0, 0.1, 1.0))
-		start_btn.add_theme_constant_override("font_size", 34)
-	# Gentle pulsing glow on the PLAY button to draw the eye.
-	if play_bg is ColorRect:
+		start_btn.add_theme_font_size_override("font_size", 30)
+	# Gentle pulsing glow on the rounded PLAY button stylebox to draw the eye.
+	if _play_btn_style != null:
 		var tw := create_tween().set_loops()
 		tw.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-		tw.tween_property(play_bg, "modulate:a", 0.65, 0.9)
-		tw.tween_property(play_bg, "modulate:a", 1.0, 0.9)
+		tw.tween_property(_play_btn_style, "bg_color:a", 0.62, 0.9)
+		tw.tween_property(_play_btn_style, "bg_color:a", 0.92, 0.9)
 
 
 var _arcade_font_cache: Dictionary = {}
