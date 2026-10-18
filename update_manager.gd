@@ -2,13 +2,13 @@ extends Node
 
 ## Manages checking for game updates from Google Play Store / remote version endpoint
 ## Package: com.psygames.musicsquare
-## Current Release: 1.1.1 (versionCode: 10)
+## Current Release: 1.1.2 (versionCode: 11)
 
 signal update_available(version_info: Dictionary)
 signal update_check_completed(has_update: bool)
 
-const CURRENT_VERSION_NAME: String = "1.1.1"
-const CURRENT_VERSION_CODE: int = 10
+const CURRENT_VERSION_NAME: String = "1.1.2"
+const CURRENT_VERSION_CODE: int = 11
 const PACKAGE_NAME: String = "com.psygames.musicsquare"
 const STORE_MARKET_URI: String = "market://details?id=com.psygames.musicsquare"
 const STORE_WEB_URL: String = "https://play.google.com/store/apps/details?id=com.psygames.musicsquare"
