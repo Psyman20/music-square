@@ -1,38 +1,151 @@
 extends Node
 
-# Synthesized sound effects using AudioStreamGenerator
-# No external audio files needed
+signal voice_started(duration: float)
+
+# Synthesized sound effects using AudioStreamGenerator + Cyber-Arcade Announcer Voices
 var _players: Dictionary = {}
+var _voice_player: AudioStreamPlayer
+var _voice_streams: Dictionary = {}
+var _current_voice_priority: int = 0
+var _current_voice_start_msec: int = 0
+var _last_voice_played_msec: Dictionary = {}
 var active_pack: String = "classic"
+var announcer_enabled: bool = true
+
+const VOICE_FILES := [
+	"new_high_score",
+	"achievement_unlocked",
+	"mission_complete",
+	"new_unlock",
+	"combo_max",
+	"unstoppable",
+	"godlike",
+	"legendary",
+	"frenzy_mode",
+	"overdrive",
+	"double_dash",
+	"max_charge",
+	"clutch_save",
+	"jackpot",
+]
 
 
 func _ready() -> void:
-	# Pre-generate all sound effects
+	# Pre-generate all sound effects and setup announcer voice player
 	_generate_all_sounds()
+	_setup_voice_announcer()
+
+
+func _setup_voice_announcer() -> void:
+	_voice_player = AudioStreamPlayer.new()
+	_voice_player.name = "VoiceAnnouncerPlayer"
+	_voice_player.bus = &"Master"
+	_voice_player.volume_db = 1.5
+	add_child(_voice_player)
+	for v_name: String in VOICE_FILES:
+		var path := "res://voices/" + v_name + ".ogg"
+		if ResourceLoader.exists(path):
+			var stream := load(path) as AudioStream
+			if stream is AudioStreamOggVorbis:
+				(stream as AudioStreamOggVorbis).loop = false
+			if stream != null:
+				_voice_streams[v_name] = stream
+
+
+func play_voice(voice_name: String, priority: int = 50, cooldown_sec: float = 1.2) -> void:
+	if not announcer_enabled or _voice_player == null or not is_inside_tree() or DisplayServer.get_name() == "headless":
+		return
+	var stream: AudioStream = _voice_streams.get(voice_name)
+	if stream == null:
+		var path := "res://voices/" + voice_name + ".ogg"
+		if ResourceLoader.exists(path):
+			stream = load(path) as AudioStream
+			if stream is AudioStreamOggVorbis:
+				(stream as AudioStreamOggVorbis).loop = false
+			if stream != null:
+				_voice_streams[voice_name] = stream
+	if stream == null:
+		return
+
+	var now_msec := Time.get_ticks_msec()
+	var last_msec: int = int(_last_voice_played_msec.get(voice_name, -99999))
+	if float(now_msec - last_msec) < cooldown_sec * 1000.0:
+		return
+
+	if _voice_player.playing:
+		var elapsed_msec := now_msec - _current_voice_start_msec
+		if priority < _current_voice_priority and elapsed_msec < 1400:
+			return
+		if priority == _current_voice_priority and elapsed_msec < 350:
+			return
+
+	_last_voice_played_msec[voice_name] = now_msec
+	_current_voice_priority = priority
+	_current_voice_start_msec = now_msec
+	_voice_player.stream = stream
+	_voice_player.pitch_scale = 1.0
+	_voice_player.play()
+	voice_started.emit(maxf(0.5, stream.get_length()))
+
+
+func stop_voice() -> void:
+	if _voice_player != null and is_instance_valid(_voice_player) and _voice_player.playing:
+		_voice_player.stop()
+	_current_voice_priority = 0
 
 
 func play(sound_name: String) -> void:
+	play_pitched(sound_name, 1.0)
+
+
+func play_pitched(sound_name: String, pitch: float = 1.0) -> void:
+	var clamped_pitch := clampf(pitch, 0.5, 2.2)
 	if sound_name == "correct":
 		var pack_key := "correct_" + active_pack
 		if _players.has(pack_key):
-			_players[pack_key].play()
+			var p: AudioStreamPlayer = _players[pack_key]
+			p.pitch_scale = clamped_pitch
+			p.play()
 			return
 	var player: AudioStreamPlayer = _players.get(sound_name)
 	if player != null:
+		player.pitch_scale = clamped_pitch
 		player.play()
 
 
 func preview_pack(pack_id: String) -> void:
 	var pack_key := "correct_" + pack_id
 	if _players.has(pack_key):
-		_players[pack_key].play()
+		var p: AudioStreamPlayer = _players[pack_key]
+		p.pitch_scale = 1.0
+		p.play()
 	else:
 		play("correct")
 
 
+func _exit_tree() -> void:
+	if _voice_player != null and is_instance_valid(_voice_player):
+		_voice_player.stop()
+		_voice_player.stream = null
+	_voice_streams.clear()
+	for k in _players:
+		var p: AudioStreamPlayer = _players[k]
+		if p != null and is_instance_valid(p):
+			p.stop()
+			p.stream = null
+	_players.clear()
+
+
 func _generate_all_sounds() -> void:
-	_generate_sound("correct", _make_correct_sfx)
 	_generate_sound("correct_classic", _make_correct_sfx)
+	# Share the classic stream for default "correct" key without regenerating PCM buffer
+	if _players.has("correct_classic"):
+		var base_player: AudioStreamPlayer = _players["correct_classic"]
+		var alias_player := AudioStreamPlayer.new()
+		alias_player.bus = &"Master"
+		alias_player.stream = base_player.stream
+		add_child(alias_player)
+		_players["correct"] = alias_player
 	_generate_sound("correct_chiptune", _make_correct_chiptune_sfx)
 	_generate_sound("correct_cyber_click", _make_correct_cyber_click_sfx)
 	_generate_sound("correct_dream_chord", _make_correct_dream_chord_sfx)
@@ -44,12 +157,14 @@ func _generate_all_sounds() -> void:
 	_generate_sound("tap", _make_tap_sfx)
 	_generate_sound("remap", _make_remap_sfx)
 	_generate_sound("unlock", _make_unlock_sfx)
+	_generate_sound("shield", _make_shield_sfx)
+	_generate_sound("shield_break", _make_shield_break_sfx)
 
 
 func _generate_sound(sound_name: String, generator: Callable) -> void:
 	var sample_rate := 44100
 	var player := AudioStreamPlayer.new()
-	player.bus = "Master"
+	player.bus = &"Master"
 	add_child(player)
 
 	var data: PackedVector2Array = generator.call(sample_rate)
@@ -323,4 +438,38 @@ func _make_unlock_sfx(sr: int) -> PackedVector2Array:
 
 		data[i] = Vector2(total_val, total_val)
 
+	return data
+
+
+func _make_shield_sfx(sr: int) -> PackedVector2Array:
+	# Crystalline sci-fi barrier activation hum + harmonic shimmer
+	var length := 0.28
+	var samples := int(sr * length)
+	var data := PackedVector2Array()
+	data.resize(samples)
+	for i in range(samples):
+		var t := float(i) / sr
+		var env := sin((t / length) * PI)
+		var f1 := 440.0 + (t / length) * 440.0
+		var f2 := 659.25 + (t / length) * 659.25
+		var shimmer := sin(2.0 * PI * 32.0 * t) * 0.25 + 0.75
+		var val := (sin(2.0 * PI * f1 * t) * 0.55 + sin(2.0 * PI * f2 * t) * 0.45) * env * shimmer * 0.28
+		data[i] = Vector2(val * 0.95, val * 1.05)
+	return data
+
+
+func _make_shield_break_sfx(sr: int) -> PackedVector2Array:
+	# Energetic barrier deflection / shatter chime + sub-punch
+	var length := 0.32
+	var samples := int(sr * length)
+	var data := PackedVector2Array()
+	data.resize(samples)
+	for i in range(samples):
+		var t := float(i) / sr
+		var env := pow(1.0 - (t / length), 1.4)
+		var sub_f := 280.0 * exp(-t * 9.0) + 55.0
+		var sub := sin(2.0 * PI * sub_f * t) * 0.55
+		var bell := (sin(2.0 * PI * 1174.66 * t) + sin(2.0 * PI * 1567.98 * t) * 0.7) * exp(-t * 11.0) * 0.45
+		var val := (sub + bell) * env * 0.34
+		data[i] = Vector2(val, val)
 	return data

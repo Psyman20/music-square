@@ -136,10 +136,18 @@ var _play_btn_style: StyleBoxFlat
 var _play_btn_hover_style: StyleBoxFlat
 var _leaderboard_btn_style: StyleBoxFlat
 var _leaderboard_btn_hover_style: StyleBoxFlat
+var _dir_square_styles: Dictionary = {}
+var _center_live_style: StyleBoxFlat = null
+var _combo_bar_fill_style: StyleBoxFlat = null
+var _fever_bar_fill_style: StyleBoxFlat = null
 var _last_displayed_lives: int = GameSettings.MAX_LIVES
 var _heart_throb_tween: Tween
 var _lives_bezel_style: StyleBoxFlat
 var _song_player: AudioStreamPlayer
+var _song_cache: Dictionary = {}
+var _unit_heart_pts: PackedVector2Array = PackedVector2Array()
+var _last_shader_audio_pulse: float = -1.0
+var _last_shader_streak_energy: float = -1.0
 
 # --- Songs / Unlocks UI ---
 var _songs_button: Button
@@ -171,6 +179,7 @@ var _music_volume_label: Label
 var _board_offset_slider: HSlider
 var _board_offset_label: Label
 var _haptics_toggle_btn: Button
+var _announcer_toggle_btn: Button
 var _reset_game_btn: Button
 var _reset_confirm_modal: Control
 var _tutorial_return_state: GameSettings.GameState = GameSettings.GameState.PLAYING
@@ -205,6 +214,19 @@ var _frenzy_hud_label: Label
 var frenzy_charges: int = 0
 var _frenzy_charge_label: Label
 
+# --- Overdrive Fever, Timing Chain, Shield & Double-Dash State ---
+var fever_meter: float = 0.0
+var _fever_bar: ProgressBar = null
+var _fever_label: Label = null
+var perfect_streak: int = 0
+var best_perfect_streak_this_game: int = 0
+var has_shield: bool = false
+var _shield_hud_label: Label = null
+var is_double_turn: bool = false
+var double_turn_step: int = 0
+var _double_indicator_label: Label = null
+var sparks_collected_in_run: int = 0
+
 # --- Combo Multiplier HUD ---
 var _combo_container: HBoxContainer
 var _combo_label: Label
@@ -220,6 +242,10 @@ var _clutch_swipes_this_game: int = 0
 var _frenzies_at_max_multiplier: int = 0
 var _achievement_toast_queue: Array[Dictionary] = []
 var _is_showing_achievement_toast: bool = false
+var _high_score_at_run_start: int = 0
+var _beaten_high_score_this_run: bool = false
+var _unlocked_songs_this_run: Dictionary = {}
+var _music_duck_tween: Tween = null
 
 # --- Hold Mechanic State ---
 const MAX_HOLD_DURATION := 2.0
@@ -284,6 +310,7 @@ var _has_prompted_update: bool = false
 
 func _ready() -> void:
 	_init_secure_score()
+	_precompute_unit_heart()
 	direction_squares = {
 		"up": up_square, "down": down_square,
 		"left": left_square, "right": right_square,
@@ -293,9 +320,12 @@ func _ready() -> void:
 	center_square.set_meta("dir", "")
 	direction_colors = _get_theme().get("board", {}).duplicate()
 
-	# Sync persisted hit sound pack
-	if sfx != null and "active_pack" in sfx:
-		sfx.active_pack = settings.selected_sfx_pack
+	# Sync persisted hit sound pack & announcer voice toggle
+	if sfx != null:
+		if "active_pack" in sfx:
+			sfx.active_pack = settings.selected_sfx_pack
+		if "announcer_enabled" in sfx:
+			sfx.announcer_enabled = settings.announcer_enabled
 
 	# Create shared styleboxes
 	_create_styles()
@@ -367,6 +397,23 @@ func _ready() -> void:
 	if has_node("/root/UpdateManager"):
 		get_node("/root/UpdateManager").update_available.connect(_on_update_available)
 		get_node("/root/UpdateManager").check_for_updates()
+
+
+func _exit_tree() -> void:
+	if _song_player != null and is_instance_valid(_song_player):
+		_song_player.stop()
+		_song_player.stream = null
+	_song_cache.clear()
+
+
+func _precompute_unit_heart() -> void:
+	var num_pts := 32
+	_unit_heart_pts.resize(num_pts)
+	for k in range(num_pts):
+		var t := (float(k) / float(num_pts)) * TAU
+		var hx := 16.0 * pow(sin(t), 3)
+		var hy := -(13.0 * cos(t) - 5.0 * cos(2.0 * t) - 2.0 * cos(3.0 * t) - cos(4.0 * t))
+		_unit_heart_pts[k] = Vector2(hx / 16.0, (hy - 4.5) / 16.0)
 
 
 func _get_theme() -> Dictionary:
@@ -476,6 +523,32 @@ func _create_styles() -> void:
 
 	_apply_style_colors()
 
+	# Pre-allocate persistent styleboxes for each board square to avoid per-turn allocations
+	_dir_square_styles.clear()
+	for dir: String in direction_squares:
+		var d_style := _panel_style.duplicate() as StyleBoxFlat
+		_dir_square_styles[dir] = d_style
+		var p: Panel = direction_squares[dir]
+		if p != null:
+			p.add_theme_stylebox_override("panel", d_style)
+	_center_live_style = _center_panel_style.duplicate() as StyleBoxFlat
+	if center_square != null:
+		center_square.add_theme_stylebox_override("panel", _center_live_style)
+
+
+func _reset_dir_square_style(style: StyleBoxFlat) -> void:
+	style.set_border_width_all(3)
+	style.set_border_color(_panel_style.border_color)
+	style.set_shadow_color(_panel_style.shadow_color)
+	style.set_shadow_size(10)
+
+
+func _reset_center_square_style(style: StyleBoxFlat) -> void:
+	style.set_border_width_all(4)
+	style.set_border_color(_center_panel_style.border_color)
+	style.set_shadow_color(_center_panel_style.shadow_color)
+	style.set_shadow_size(14)
+
 
 func _apply_style_colors() -> void:
 	# Mutate the shared styleboxes IN PLACE so every node holding a reference
@@ -494,14 +567,17 @@ func _apply_style_colors() -> void:
 func _apply_board_styles() -> void:
 	_apply_board_colors()
 
-	_center_panel_style.bg_color = direction_colors["up"]
-	center_square.add_theme_stylebox_override("panel", _center_panel_style)
+	if _center_live_style != null:
+		_center_live_style.bg_color = direction_colors["up"]
+		center_square.add_theme_stylebox_override("panel", _center_live_style)
 	center_square.pivot_offset = Vector2(50, 50)
 
 	for dir: String in direction_squares:
 		var p: Panel = direction_squares[dir]
 		if p != null and is_instance_valid(p):
 			p.pivot_offset = p.size / 2.0
+			if _dir_square_styles.has(dir):
+				p.add_theme_stylebox_override("panel", _dir_square_styles[dir])
 
 	# Center pivot for the board container so remap pop animates from its center
 	var board: Control = $GameScreen/Board
@@ -551,6 +627,10 @@ func _apply_board_position() -> void:
 		_frenzy_hud_label.offset_top = mid_y - 17.0
 		_frenzy_hud_label.offset_bottom = mid_y + 17.0
 
+	if _double_indicator_label != null and is_instance_valid(_double_indicator_label):
+		_double_indicator_label.offset_top = mid_y - 16.0
+		_double_indicator_label.offset_bottom = mid_y + 16.0
+
 
 func _apply_skin_to_square_style(style: StyleBoxFlat, col: Color, is_center: bool = false) -> void:
 	var skin_id: String = settings.selected_skin if settings != null else "classic"
@@ -570,7 +650,14 @@ func _apply_board_colors() -> void:
 
 	for dir: String in direction_squares:
 		var panel: Panel = direction_squares[dir]
-		var style := _panel_style.duplicate()
+		var style: StyleBoxFlat = _dir_square_styles.get(dir)
+		if style == null:
+			style = _panel_style.duplicate() as StyleBoxFlat
+			_dir_square_styles[dir] = style
+			panel.add_theme_stylebox_override("panel", style)
+		elif panel.get_theme_stylebox("panel") != style:
+			panel.add_theme_stylebox_override("panel", style)
+		_reset_dir_square_style(style)
 		if is_frenzy_active:
 			if dir == frenzy_special_dir:
 				style.bg_color = FRENZY_SPECIAL_COLOR
@@ -589,6 +676,18 @@ func _apply_board_colors() -> void:
 				style.set_border_color(Color(0.2, 0.95, 1.0, 0.95))
 				style.set_shadow_color(Color(0.1, 0.8, 1.0, 0.6))
 				style.set_shadow_size(14)
+			elif powerup_type == "shield":
+				style.bg_color = Color(0.05, 0.18, 0.16, 0.94)
+				style.set_border_width_all(3)
+				style.set_border_color(Color(0.18, 1.0, 0.72, 0.98))
+				style.set_shadow_color(Color(0.12, 0.95, 0.65, 0.65))
+				style.set_shadow_size(15)
+			elif powerup_type == "spark_jackpot":
+				style.bg_color = Color(0.22, 0.14, 0.04, 0.94)
+				style.set_border_width_all(3)
+				style.set_border_color(Color(1.5, 1.15, 0.2, 0.98))
+				style.set_shadow_color(Color(1.0, 0.85, 0.15, 0.65))
+				style.set_shadow_size(15)
 			else:
 				# Square has no direction color — dark neutral background with glowing border
 				style.bg_color = Color(0.12, 0.10, 0.22, 0.9)
@@ -601,33 +700,47 @@ func _apply_board_colors() -> void:
 			style.set_border_color(Color(0.2, 0.95, 1.0, 0.95))
 			style.set_shadow_color(Color(0.2, 0.9, 1.0, 0.65))
 			style.set_shadow_size(16)
+		elif is_double_turn and dir == current_target_direction:
+			_apply_skin_to_square_style(style, direction_colors[dir], false)
+			style.set_border_width_all(3)
+			style.set_border_color(Color(1.4, 0.85, 0.2, 0.98))
+			style.set_shadow_color(Color(1.2, 0.7, 0.15, 0.65))
+			style.set_shadow_size(16)
 		else:
 			_apply_skin_to_square_style(style, direction_colors[dir], false)
-		panel.add_theme_stylebox_override("panel", style)
 		panel.queue_redraw()
 
 	if center_square != null:
+		if _center_live_style == null:
+			_center_live_style = _center_panel_style.duplicate() as StyleBoxFlat
+			center_square.add_theme_stylebox_override("panel", _center_live_style)
+		_reset_center_square_style(_center_live_style)
 		var c_target_col: Color = _last_target_color if _last_target_color.a > 0.01 else direction_colors.get("up", Color.WHITE)
 		if is_frenzy_active:
-			var c_style := _center_panel_style.duplicate()
-			c_style.bg_color = frenzy_gold
-			c_style.set_border_width_all(3)
-			c_style.set_border_color(FRENZY_SPECIAL_COLOR)
-			c_style.set_shadow_color(Color(1.8, 0.2, 0.85, 0.5))
-			c_style.set_shadow_size(14)
-			center_square.add_theme_stylebox_override("panel", c_style)
+			_center_live_style.bg_color = frenzy_gold
+			_center_live_style.set_border_width_all(3)
+			_center_live_style.set_border_color(FRENZY_SPECIAL_COLOR)
+			_center_live_style.set_shadow_color(Color(1.8, 0.2, 0.85, 0.5))
+			_center_live_style.set_shadow_size(14)
 		elif is_hold_turn:
-			var c_style := _center_panel_style.duplicate()
-			_apply_skin_to_square_style(c_style, c_target_col, true)
-			c_style.set_border_width_all(3)
-			c_style.set_border_color(Color(0.2, 0.95, 1.0, 0.95))
-			c_style.set_shadow_color(Color(0.2, 0.9, 1.0, 0.65))
-			c_style.set_shadow_size(16)
-			center_square.add_theme_stylebox_override("panel", c_style)
+			_apply_skin_to_square_style(_center_live_style, c_target_col, true)
+			_center_live_style.set_border_width_all(3)
+			_center_live_style.set_border_color(Color(0.2, 0.95, 1.0, 0.95))
+			_center_live_style.set_shadow_color(Color(0.2, 0.9, 1.0, 0.65))
+			_center_live_style.set_shadow_size(16)
+		elif is_double_turn:
+			_apply_skin_to_square_style(_center_live_style, c_target_col, true)
+			_center_live_style.set_border_width_all(4)
+			_center_live_style.set_border_color(Color(1.5, 0.92, 0.2, 0.98))
+			_center_live_style.set_shadow_color(Color(1.2, 0.75, 0.15, 0.7))
+			_center_live_style.set_shadow_size(16)
 		else:
-			var c_style := _center_panel_style.duplicate()
-			_apply_skin_to_square_style(c_style, c_target_col, true)
-			center_square.add_theme_stylebox_override("panel", c_style)
+			_apply_skin_to_square_style(_center_live_style, c_target_col, true)
+			if has_shield:
+				_center_live_style.set_border_width_all(4)
+				_center_live_style.set_border_color(Color(0.2, 1.0, 0.75, 0.98))
+				_center_live_style.set_shadow_color(Color(0.15, 0.95, 0.7, 0.65))
+				_center_live_style.set_shadow_size(16)
 		center_square.queue_redraw()
 
 
@@ -668,6 +781,15 @@ func _on_board_square_draw(square: Panel) -> void:
 	if is_hold_turn and not is_frenzy_active:
 		if square == center_square or (sq_dir != "" and sq_dir == current_target_direction):
 			_draw_hold_ring(square, square == center_square)
+
+	# Double-Dash Rush indicator ring (2x swipe turn)
+	if is_double_turn and not is_frenzy_active:
+		if square == center_square or (sq_dir != "" and sq_dir == current_target_direction):
+			_draw_double_rush_ring(square, square == center_square)
+
+	# Active Aegis Shield halo around center square
+	if has_shield and square == center_square and not is_frenzy_active:
+		_draw_shield_halo(square)
 
 
 func _draw_square_skin_overlay(panel: Panel, sq_dir: String) -> void:
@@ -885,6 +1007,81 @@ func _draw_powerup_icon(panel: Panel, p_type: String) -> void:
 		var plus_pos := center + Vector2(16, -16) * scale_factor
 		panel.draw_line(plus_pos + Vector2(-5, 0) * scale_factor, plus_pos + Vector2(5, 0) * scale_factor, Color(1.0, 0.9, 0.2), 3.5 * scale_factor)
 		panel.draw_line(plus_pos + Vector2(0, -5) * scale_factor, plus_pos + Vector2(0, 5) * scale_factor, Color(1.0, 0.9, 0.2), 3.5 * scale_factor)
+	elif p_type == "shield":
+		# 🛡️ Neon Aegis Shield crest + pulsing emerald-cyan halo
+		var pulse := 1.0 + sin(Time.get_ticks_msec() * 0.009) * 0.08
+		var r := 24.0 * scale_factor
+		var glow_col := Color(0.18, 1.0, 0.72, 0.95)
+		var outline_col := Color(0.06, 0.05, 0.14, 0.95)
+		panel.draw_arc(center, r * pulse + 3.0, 0.0, TAU, 32, Color(0.18, 1.0, 0.72, 0.28), 5.0 * scale_factor, true)
+		var sh_pts := PackedVector2Array([
+			center + Vector2(0, -20) * scale_factor,
+			center + Vector2(17, -12) * scale_factor,
+			center + Vector2(14, 6) * scale_factor,
+			center + Vector2(0, 21) * scale_factor,
+			center + Vector2(-14, 6) * scale_factor,
+			center + Vector2(-17, -12) * scale_factor,
+		])
+		var sh_closed := sh_pts.duplicate()
+		sh_closed.append(sh_pts[0])
+		panel.draw_polyline(sh_closed, outline_col, 5.0 * scale_factor, true)
+		panel.draw_colored_polygon(sh_pts, glow_col)
+		panel.draw_polyline(sh_closed, Color(1.0, 1.0, 1.0, 0.95), 2.2 * scale_factor, true)
+		# Inner core chevron
+		panel.draw_line(center + Vector2(-7, -2) * scale_factor, center + Vector2(0, 6) * scale_factor, Color(1, 1, 1, 0.95), 2.8 * scale_factor)
+		panel.draw_line(center + Vector2(0, 6) * scale_factor, center + Vector2(7, -2) * scale_factor, Color(1, 1, 1, 0.95), 2.8 * scale_factor)
+	elif p_type == "spark_jackpot":
+		# 💎 Golden Spark Jackpot: 4-point radiant star-diamond + orbiting gold ring
+		var pulse := 1.0 + sin(Time.get_ticks_msec() * 0.011) * 0.09
+		var r := 23.0 * scale_factor
+		var gold_col := Color(1.4, 1.1, 0.2, 0.98)
+		var outline_col := Color(0.08, 0.05, 0.14, 0.95)
+		panel.draw_arc(center, r * pulse + 3.0, 0.0, TAU, 32, Color(1.0, 0.85, 0.15, 0.32), 5.5 * scale_factor, true)
+		var dm_pts := PackedVector2Array([
+			center + Vector2(0, -21) * scale_factor,
+			center + Vector2(7, -7) * scale_factor,
+			center + Vector2(21, 0) * scale_factor,
+			center + Vector2(7, 7) * scale_factor,
+			center + Vector2(0, 21) * scale_factor,
+			center + Vector2(-7, 7) * scale_factor,
+			center + Vector2(-21, 0) * scale_factor,
+			center + Vector2(-7, -7) * scale_factor,
+		])
+		var dm_closed := dm_pts.duplicate()
+		dm_closed.append(dm_pts[0])
+		panel.draw_polyline(dm_closed, outline_col, 4.8 * scale_factor, true)
+		panel.draw_colored_polygon(dm_pts, gold_col)
+		panel.draw_polyline(dm_closed, Color(1.0, 1.0, 0.85, 0.95), 2.0 * scale_factor, true)
+		panel.draw_circle(center, 4.5 * scale_factor, Color(1.0, 1.0, 1.0, 0.98))
+
+
+func _draw_double_rush_ring(panel: Panel, _is_center: bool) -> void:
+	if panel == null or not is_instance_valid(panel):
+		return
+	var s := panel.size
+	var c := s / 2.0
+	var pulse := 1.0 + sin(Time.get_ticks_msec() * 0.015) * 0.06
+	var r := 60.0 * pulse
+	var col := Color(1.5, 0.92, 0.2, 0.95) if double_turn_step <= 1 else Color(1.8, 0.35, 0.95, 0.98)
+	panel.draw_arc(c, r, 0.0, TAU, 40, Color(col.r, col.g, col.b, 0.32), 8.0, true)
+	panel.draw_arc(c, r, 0.0, TAU, 40, col, 3.5, true)
+	panel.draw_arc(c, r - 7.0, 0.0, TAU, 40, Color(1.0, 1.0, 1.0, 0.75), 1.8, true)
+
+
+func _draw_shield_halo(panel: Panel) -> void:
+	if panel == null or not is_instance_valid(panel):
+		return
+	var c := panel.size / 2.0
+	var t_sec := Time.get_ticks_msec() * 0.004
+	var r := 58.0 + sin(t_sec * 2.5) * 2.5
+	var col := Color(0.18, 1.0, 0.75, 0.88)
+	# Octagonal energy barrier around the center square
+	var oct := PackedVector2Array()
+	for i in range(9):
+		var ang := t_sec + float(i) * (TAU / 8.0)
+		oct.append(c + Vector2(cos(ang), sin(ang)) * r)
+	panel.draw_polyline(oct, Color(0.15, 0.95, 0.7, 0.28), 7.0, true)
+	panel.draw_polyline(oct, col, 2.5, true)
 
 
 func _draw_symbol_on_panel(panel: Panel, color_key: String) -> void:
@@ -1055,6 +1252,18 @@ func _setup_initial_game_state() -> void:
 	is_holding_active = false
 	hold_duration = 0.0
 	hold_exit_buffer = 0.0
+	is_double_turn = false
+	double_turn_step = 0
+	_cleanup_double_turn_ui()
+	fever_meter = 0.0
+	perfect_streak = 0
+	best_perfect_streak_this_game = 0
+	has_shield = false
+	sparks_collected_in_run = 0
+	_high_score_at_run_start = settings.high_score if settings != null else 0
+	_beaten_high_score_this_run = false
+	_unlocked_songs_this_run.clear()
+	_update_shield_ui()
 	_cleanup_hold_ui()
 	_end_frenzy_mode()
 	frenzy_charges = 0
@@ -1100,7 +1309,23 @@ func _setup_song_player() -> void:
 	_song_player.volume_db = linear_to_db(clampf(settings.music_volume, 0.0001, 1.0))
 	_song_player.bus = &"Master"
 	add_child(_song_player)
+	if sfx != null and sfx.has_signal("voice_started") and not sfx.voice_started.is_connected(_on_voice_started):
+		sfx.voice_started.connect(_on_voice_started)
 	_play_selected_song()
+
+
+func _on_voice_started(duration: float) -> void:
+	_audio_pulse = minf(1.0, _audio_pulse + 0.55)
+	if _song_player == null or settings == null or settings.music_volume <= 0.01:
+		return
+	if _music_duck_tween != null and _music_duck_tween.is_valid():
+		_music_duck_tween.kill()
+	var base_db := linear_to_db(clampf(settings.music_volume, 0.0001, 1.0))
+	var ducked_db := base_db - 4.5
+	_music_duck_tween = create_tween()
+	_music_duck_tween.tween_property(_song_player, "volume_db", ducked_db, 0.05)
+	_music_duck_tween.tween_interval(maxf(0.2, duration - 0.12))
+	_music_duck_tween.tween_property(_song_player, "volume_db", base_db, 0.28)
 
 
 func _get_song_by_id(song_id: String) -> Dictionary:
@@ -1125,13 +1350,18 @@ func _play_selected_song() -> void:
 		# Fall back to the first (free) song if the selected one is missing.
 		var first: Dictionary = settings.SONGS[0]
 		path = str(first.get("path", ""))
-	var stream := load(path) as AudioStream
+	var stream: AudioStream = _song_cache.get(path)
 	if stream == null:
-		return
-	if stream is AudioStreamOggVorbis:
-		(stream as AudioStreamOggVorbis).loop = true
-	_song_player.stream = stream
-	_song_player.play()
+		stream = load(path) as AudioStream
+		if stream == null:
+			return
+		if stream is AudioStreamOggVorbis:
+			(stream as AudioStreamOggVorbis).loop = true
+		_song_cache[path] = stream
+	if _song_player.stream != stream or not _song_player.playing:
+		_song_player.stream = stream
+		if is_inside_tree() and DisplayServer.get_name() != "headless":
+			_song_player.play()
 
 
 func _select_song(song_id: String) -> void:
@@ -3081,6 +3311,7 @@ func _on_shop_item_pressed(category: String, item_id: String, cost: int, item_na
 			if sfx != null and "active_pack" in sfx:
 				sfx.active_pack = item_id
 		sfx.play("unlock")
+		sfx.play_voice("new_unlock", 80, 0.8)
 		_haptic_celebration()
 		_refresh_shop_screen()
 		if _shop_sparks_icon != null and is_instance_valid(_shop_sparks_icon):
@@ -3275,21 +3506,36 @@ func _setup_options_ui() -> void:
 	panel.add_child(reset_offset_btn)
 	_options_non_zone_controls.append(reset_offset_btn)
 
-	# --- HAPTIC VIBRATION TOGGLE BUTTON ---
+	# --- HAPTIC VIBRATION & VOICE ANNOUNCER TOGGLE BUTTONS (SIDE BY SIDE) ---
 	_haptics_toggle_btn = Button.new()
 	_haptics_toggle_btn.name = "HapticsToggleBtn"
 	_haptics_toggle_btn.anchor_left = 0.5
 	_haptics_toggle_btn.anchor_right = 0.5
-	_haptics_toggle_btn.offset_left = -150.0
-	_haptics_toggle_btn.offset_right = 150.0
+	_haptics_toggle_btn.offset_left = -188.0
+	_haptics_toggle_btn.offset_right = -6.0
 	_haptics_toggle_btn.offset_top = 282.0
 	_haptics_toggle_btn.offset_bottom = 330.0
-	_haptics_toggle_btn.add_theme_font_size_override("font_size", 18)
+	_haptics_toggle_btn.add_theme_font_size_override("font_size", 14)
 	_haptics_toggle_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	_haptics_toggle_btn.pressed.connect(_on_haptics_toggle_pressed)
 	panel.add_child(_haptics_toggle_btn)
 	_options_non_zone_controls.append(_haptics_toggle_btn)
 	_update_haptics_btn_style()
+
+	_announcer_toggle_btn = Button.new()
+	_announcer_toggle_btn.name = "AnnouncerToggleBtn"
+	_announcer_toggle_btn.anchor_left = 0.5
+	_announcer_toggle_btn.anchor_right = 0.5
+	_announcer_toggle_btn.offset_left = 6.0
+	_announcer_toggle_btn.offset_right = 188.0
+	_announcer_toggle_btn.offset_top = 282.0
+	_announcer_toggle_btn.offset_bottom = 330.0
+	_announcer_toggle_btn.add_theme_font_size_override("font_size", 14)
+	_announcer_toggle_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	_announcer_toggle_btn.pressed.connect(_on_announcer_toggle_pressed)
+	panel.add_child(_announcer_toggle_btn)
+	_options_non_zone_controls.append(_announcer_toggle_btn)
+	_update_announcer_btn_style()
 
 	# --- HOW TO PLAY TUTORIAL BUTTON ---
 	var how_to_btn := Button.new()
@@ -3506,6 +3752,40 @@ func _update_haptics_btn_style() -> void:
 		_haptics_toggle_btn.add_theme_stylebox_override("normal", h_style)
 
 
+func _on_announcer_toggle_pressed() -> void:
+	settings.announcer_enabled = not settings.announcer_enabled
+	if sfx != null and "announcer_enabled" in sfx:
+		sfx.announcer_enabled = settings.announcer_enabled
+	settings.save_data()
+	_update_announcer_btn_style()
+	_haptic_tap()
+	if settings.announcer_enabled:
+		sfx.play_voice("frenzy_mode", 90, 0.1)
+	else:
+		if sfx != null and sfx.has_method("stop_voice"):
+			sfx.stop_voice()
+		sfx.play("tap")
+
+
+func _update_announcer_btn_style() -> void:
+	if _announcer_toggle_btn == null or not is_instance_valid(_announcer_toggle_btn):
+		return
+	if settings.announcer_enabled:
+		_announcer_toggle_btn.text = "ANNOUNCER: ON"
+		_announcer_toggle_btn.add_theme_color_override("font_color", Color(0.3, 0.95, 0.55))
+		var a_style := _btn_style.duplicate()
+		a_style.bg_color = Color(0.08, 0.22, 0.12, 0.9)
+		a_style.set_border_color(Color(0.2, 0.9, 0.5, 0.8))
+		_announcer_toggle_btn.add_theme_stylebox_override("normal", a_style)
+	else:
+		_announcer_toggle_btn.text = "ANNOUNCER: OFF"
+		_announcer_toggle_btn.add_theme_color_override("font_color", Color(0.7, 0.7, 0.75))
+		var a_style := _btn_style.duplicate()
+		a_style.bg_color = Color(0.15, 0.15, 0.2, 0.85)
+		a_style.set_border_color(Color(0.4, 0.4, 0.5, 0.6))
+		_announcer_toggle_btn.add_theme_stylebox_override("normal", a_style)
+
+
 func _on_reset_game_pressed() -> void:
 	sfx.play("tap")
 	if _reset_confirm_modal != null:
@@ -3523,6 +3803,8 @@ func _execute_reset_game() -> void:
 	_haptic_danger()
 	settings.reset_game_data()
 	sfx.active_pack = settings.selected_sfx_pack
+	if "announcer_enabled" in sfx:
+		sfx.announcer_enabled = settings.announcer_enabled
 	_apply_theme()
 	_apply_board_position()
 	_play_selected_song()
@@ -3568,6 +3850,7 @@ func _refresh_options_screen() -> void:
 		_board_offset_slider.value = settings.board_vertical_offset
 	_update_board_offset_label()
 	_update_haptics_btn_style()
+	_update_announcer_btn_style()
 
 
 func _on_music_volume_changed(val: float) -> void:
@@ -3742,12 +4025,12 @@ func _setup_tutorial_ui() -> void:
 	scroll.add_child(vbox)
 
 	# -------------------------------------------------------------
-	# 1. BASIC SWIPES CARD
+	# 1. BASIC SWIPES, TIMING TIERS & OVERDRIVE FEVER
 	# -------------------------------------------------------------
-	var swipe_card := _create_tutorial_card(Color(0.08, 0.12, 0.22, 0.95), Color(0.25, 0.75, 1.0, 0.9), 260.0)
+	var swipe_card := _create_tutorial_card(Color(0.08, 0.12, 0.22, 0.95), Color(0.25, 0.75, 1.0, 0.9), 285.0)
 	vbox.add_child(swipe_card)
 
-	var swipe_title := _create_tutorial_card_title("1. BASIC SWIPES & COMBO", Color(0.3, 0.85, 1.0))
+	var swipe_title := _create_tutorial_card_title("1. SWIPES, TIMING & OVERDRIVE FEVER", Color(0.3, 0.85, 1.0))
 	swipe_card.add_child(swipe_title)
 
 	# Visual Direction Matching Diagram (Centered)
@@ -3818,17 +4101,18 @@ func _setup_tutorial_ui() -> void:
 
 	var swipe_desc := _create_tutorial_card_body(
 		"* Match center square color to outer direction.\n" +
-		"* Fast swipes award Speed Bonus points before time shrinks!\n" +
-		"* Build streaks for up to 4x COMBO multiplier!"
+		"* Instant swipes earn BLAZING! (1.5x) or PERFECT! (1.25x) bonus!\n" +
+		"* Last-moment swipes trigger CLUTCH SAVE! bonus points!\n" +
+		"* Every swipe charges your ⚡ OVERDRIVE FEVER meter — reach 100% to automatically unleash Overdrive Frenzy!"
 	)
 	swipe_desc.offset_left = 16.0
 	swipe_desc.offset_right = -16.0
 	swipe_desc.offset_top = 174.0
-	swipe_desc.offset_bottom = 250.0
+	swipe_desc.offset_bottom = 278.0
 	swipe_card.add_child(swipe_desc)
 
 	# -------------------------------------------------------------
-	# 2. HOLD SQUARES (NEW MECHANIC)
+	# 2. HOLD SQUARES (HOLD MODE)
 	# -------------------------------------------------------------
 	var hold_card := _create_tutorial_card(Color(0.06, 0.14, 0.24, 0.95), Color(0.2, 0.95, 1.0, 0.9), 195.0)
 	vbox.add_child(hold_card)
@@ -3845,9 +4129,9 @@ func _setup_tutorial_ui() -> void:
 	hold_card.add_child(hold_icon)
 
 	var hold_desc := _create_tutorial_card_body(
-		"* When a glowing countdown ring appears on the board:\n" +
+		"* When pulsing corner brackets appear on the board:\n" +
 		"* Swipe & HOLD your finger in that direction!\n" +
-		"* Charge up to 2 SECONDS for MASSIVE points!\n" +
+		"* Charge up to 2 SECONDS for MASSIVE points & +22% Fever!\n" +
 		"* Auto-completes when charged or upon finger release."
 	)
 	hold_desc.offset_left = 68.0
@@ -3857,12 +4141,40 @@ func _setup_tutorial_ui() -> void:
 	hold_card.add_child(hold_desc)
 
 	# -------------------------------------------------------------
-	# 3. FRENZY POWER-UP & PINK 3X SQUARE
+	# 3. 2X DOUBLE-DASH RUSH (NEW MECHANIC)
+	# -------------------------------------------------------------
+	var double_card := _create_tutorial_card(Color(0.18, 0.06, 0.18, 0.95), Color(1.0, 0.35, 0.85, 0.95), 195.0)
+	vbox.add_child(double_card)
+
+	var double_title := _create_tutorial_card_title("3. 2X DOUBLE-DASH RUSH", Color(1.0, 0.45, 0.90))
+	double_card.add_child(double_title)
+
+	var double_icon := Panel.new()
+	double_icon.size = Vector2(44, 44)
+	double_icon.position = Vector2(14, 42)
+	double_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	double_icon.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	double_icon.draw.connect(func(): _draw_tutorial_double_rush_icon(double_icon))
+	double_card.add_child(double_icon)
+
+	var double_desc := _create_tutorial_card_body(
+		"* When twin neon rings & ⚡ 2X DOUBLE RUSH! (1/2) appear:\n" +
+		"* Swipe the 1st matching square — the center immediately shifts to a 2nd color!\n" +
+		"* Swipe the 2nd square (2/2) to detonate a 2.5x SCORE BURST!"
+	)
+	double_desc.offset_left = 68.0
+	double_desc.offset_right = -14.0
+	double_desc.offset_top = 36.0
+	double_desc.offset_bottom = 185.0
+	double_card.add_child(double_desc)
+
+	# -------------------------------------------------------------
+	# 4. FRENZY POWER-UP & OVERDRIVE FRENZY
 	# -------------------------------------------------------------
 	var frenzy_card := _create_tutorial_card(Color(0.18, 0.12, 0.04, 0.95), Color(1.0, 0.85, 0.1, 0.9), 195.0)
 	vbox.add_child(frenzy_card)
 
-	var frenzy_title := _create_tutorial_card_title("3. FRENZY POWER-UP (LIGHTNING)", Color(1.0, 0.9, 0.2))
+	var frenzy_title := _create_tutorial_card_title("4. FRENZY POWER-UP & OVERDRIVE", Color(1.0, 0.9, 0.2))
 	frenzy_card.add_child(frenzy_title)
 
 	var frenzy_icon := Panel.new()
@@ -3874,7 +4186,7 @@ func _setup_tutorial_ui() -> void:
 	frenzy_card.add_child(frenzy_icon)
 
 	var frenzy_desc := _create_tutorial_card_body(
-		"* Swipe toward the LIGHTNING BOLT to trigger 5s Frenzy!\n" +
+		"* Swipe the LIGHTNING BOLT or hit 100% Fever for Frenzy!\n" +
 		"* No countdown timer limit during Frenzy — swipe freely!\n" +
 		"* Dynamic PINK square hops every second for 3x Super Score!\n" +
 		"* Combined score multipliers reach up to 12x!"
@@ -3886,12 +4198,12 @@ func _setup_tutorial_ui() -> void:
 	frenzy_card.add_child(frenzy_desc)
 
 	# -------------------------------------------------------------
-	# 4. FRENZY TIME BOOSTER (+5s STACKABLE - NEW MECHANIC)
+	# 5. FRENZY TIME BOOSTER (+5s STACKABLE)
 	# -------------------------------------------------------------
 	var boost_card := _create_tutorial_card(Color(0.06, 0.16, 0.22, 0.95), Color(0.2, 0.95, 1.0, 0.95), 195.0)
 	vbox.add_child(boost_card)
 
-	var boost_title := _create_tutorial_card_title("4. TIME BOOSTER (+5s CHARGES)", Color(0.2, 0.95, 1.0))
+	var boost_title := _create_tutorial_card_title("5. TIME BOOSTER (+5s CHARGES)", Color(0.2, 0.95, 1.0))
 	boost_card.add_child(boost_title)
 
 	var boost_icon := Panel.new()
@@ -3915,12 +4227,70 @@ func _setup_tutorial_ui() -> void:
 	boost_card.add_child(boost_desc)
 
 	# -------------------------------------------------------------
-	# 5. SHUFFLE & SURVIVAL CARD
+	# 6. AEGIS NEON SHIELD (NEW POWER-UP)
+	# -------------------------------------------------------------
+	var shield_card := _create_tutorial_card(Color(0.04, 0.18, 0.15, 0.95), Color(0.15, 1.0, 0.78, 0.95), 195.0)
+	vbox.add_child(shield_card)
+
+	var shield_title := _create_tutorial_card_title("6. AEGIS NEON SHIELD (BARRIER)", Color(0.2, 1.0, 0.80))
+	shield_card.add_child(shield_title)
+
+	var shield_icon := Panel.new()
+	shield_icon.size = Vector2(44, 44)
+	shield_icon.position = Vector2(14, 42)
+	shield_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	shield_icon.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	shield_icon.draw.connect(func(): _draw_powerup_icon(shield_icon, "shield"))
+	shield_card.add_child(shield_icon)
+
+	var shield_desc := _create_tutorial_card_body(
+		"* Swipe the EMERALD SHIELD to activate a protective barrier!\n" +
+		"* Surrounds the center square with a rotating octagonal halo.\n" +
+		"* Automatically blocks your next wrong swipe or timeout —\n" +
+		"  saving BOTH your Heart and your Combo Streak!"
+	)
+	shield_desc.offset_left = 68.0
+	shield_desc.offset_right = -14.0
+	shield_desc.offset_top = 36.0
+	shield_desc.offset_bottom = 185.0
+	shield_card.add_child(shield_desc)
+
+	# -------------------------------------------------------------
+	# 7. NEON SPARK JACKPOT (NEW POWER-UP)
+	# -------------------------------------------------------------
+	var jackpot_card := _create_tutorial_card(Color(0.18, 0.12, 0.08, 0.95), Color(1.0, 0.78, 0.2, 0.95), 185.0)
+	vbox.add_child(jackpot_card)
+
+	var jackpot_title := _create_tutorial_card_title("7. NEON SPARK JACKPOT (DIAMOND)", Color(1.0, 0.88, 0.25))
+	jackpot_card.add_child(jackpot_title)
+
+	var jackpot_icon := Panel.new()
+	jackpot_icon.size = Vector2(44, 44)
+	jackpot_icon.position = Vector2(14, 44)
+	jackpot_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	jackpot_icon.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	jackpot_icon.draw.connect(func(): _draw_powerup_icon(jackpot_icon, "spark_jackpot"))
+	jackpot_card.add_child(jackpot_icon)
+
+	var jackpot_desc := _create_tutorial_card_body(
+		"* 💎 SPARK JACKPOT: Swipe the Golden Diamond to bank\n" +
+		"  +5 NEON SPARKS immediately mid-run + 500xMult score!\n" +
+		"* 🔥 STREAK MILESTONES: Every 50 Streak also awards\n" +
+		"  +3 Bonus Sparks and a massive score burst!"
+	)
+	jackpot_desc.offset_left = 68.0
+	jackpot_desc.offset_right = -14.0
+	jackpot_desc.offset_top = 36.0
+	jackpot_desc.offset_bottom = 175.0
+	jackpot_card.add_child(jackpot_desc)
+
+	# -------------------------------------------------------------
+	# 8. SHUFFLE & SURVIVAL CARD
 	# -------------------------------------------------------------
 	var shuffle_card := _create_tutorial_card(Color(0.14, 0.10, 0.20, 0.95), Color(0.85, 0.5, 1.0, 0.85), 165.0)
 	vbox.add_child(shuffle_card)
 
-	var shuffle_title := _create_tutorial_card_title("5. SHUFFLE & EXTRA LIVES", Color(0.9, 0.65, 1.0))
+	var shuffle_title := _create_tutorial_card_title("8. SHUFFLE & EXTRA LIVES", Color(0.9, 0.65, 1.0))
 	shuffle_card.add_child(shuffle_title)
 
 	var shuffle_desc := _create_tutorial_card_body(
@@ -3935,7 +4305,7 @@ func _setup_tutorial_ui() -> void:
 	shuffle_card.add_child(shuffle_desc)
 
 	# -------------------------------------------------------------
-	# 6. PHOTOSENSITIVITY & EPILEPSY WARNING
+	# 9. PHOTOSENSITIVITY & EPILEPSY WARNING
 	# -------------------------------------------------------------
 	var warning_card := _create_tutorial_card(Color(0.20, 0.12, 0.06, 0.95), Color(1.0, 0.65, 0.2, 0.9), 160.0)
 	vbox.add_child(warning_card)
@@ -4029,6 +4399,21 @@ func _draw_tutorial_hold_icon(panel: Panel) -> void:
 	# Inner glowing dot
 	panel.draw_circle(c, 7.0, Color(0.2, 0.95, 1.0, 0.9))
 	panel.draw_circle(c, 4.0, Color(1.0, 1.0, 1.0, 0.95))
+
+
+func _draw_tutorial_double_rush_icon(panel: Panel) -> void:
+	var c := panel.size / 2.0
+	var r1 := 18.0
+	var r2 := 12.0
+	var col_outer := Color(1.0, 0.35, 0.85, 0.95)
+	var col_inner := Color(1.0, 0.9, 0.2, 0.95)
+	panel.draw_arc(c, r1, 0.0, TAU, 28, col_outer, 2.8, true)
+	panel.draw_arc(c, r2, 0.0, TAU, 24, col_inner, 2.2, true)
+	# Twin chevrons in center
+	var pts1 := PackedVector2Array([c + Vector2(-6, 4), c + Vector2(0, -3), c + Vector2(6, 4)])
+	var pts2 := PackedVector2Array([c + Vector2(-6, -1), c + Vector2(0, -8), c + Vector2(6, -1)])
+	panel.draw_polyline(pts1, Color.WHITE, 2.2, true)
+	panel.draw_polyline(pts2, col_inner, 2.2, true)
 
 
 var _tutorial_drag_active: bool = false
@@ -4442,8 +4827,11 @@ func _setup_walkthrough_step(step: int) -> void:
 
 	# Clean reset between steps
 	_cleanup_hold_ui()
+	_cleanup_double_turn_ui()
 	is_holding_active = false
 	is_hold_turn = false
+	is_double_turn = false
+	double_turn_step = 0
 	powerup_square_dir = ""
 	powerup_type = ""
 	_clear_persistent_labels()
@@ -4459,102 +4847,121 @@ func _setup_walkthrough_step(step: int) -> void:
 
 	match step:
 		1:
-			# Step 1: Color Matching
+			# Step 1: Color Matching & Blazing Timing
 			current_target_direction = "right"
 			var col: Color = direction_colors.get("right", Color(0.12, 0.46, 0.88))
 			_last_target_color = col
-			var style := _center_panel_style.duplicate()
-			style.bg_color = col
-			center_square.add_theme_stylebox_override("panel", style)
-			center_square.queue_redraw()
 			_apply_board_colors()
 			_pulse_center()
-			_walkthrough_overlay.set_step(1, "right", "[ STEP 1 OF 6 - COLOR MATCH ]", "Look at the center square color.\nSwipe toward the MATCHING outer square!", false, false, col)
+			_walkthrough_overlay.set_step(1, "right", "[ STEP 1 OF 9 - COLOR MATCH & TIMING ]", "Swipe toward the MATCHING outer square!\nFast swipes trigger BLAZING! (1.5x) & charge Overdrive!", false, false, col)
 
 		2:
-			# Step 2: Combos & Multiplier
+			# Step 2: Combos, Multiplier & Overdrive Fever Bar
 			current_target_direction = "up"
 			var col: Color = direction_colors.get("up", Color(0.88, 0.22, 0.35))
 			_last_target_color = col
-			var style := _center_panel_style.duplicate()
-			style.bg_color = col
-			center_square.add_theme_stylebox_override("panel", style)
-			center_square.queue_redraw()
 			_apply_board_colors()
 			_pulse_center()
-			_walkthrough_overlay.set_step(2, "up", "[ STEP 2 OF 6 - STREAKS & MULTIPLIER ]", "Chain correct swipes without missing!\nEvery 5 swipes increases your MULTIPLIER up to 4x!", false, false, col)
+			_walkthrough_overlay.set_step(2, "up", "[ STEP 2 OF 9 - STREAKS & OVERDRIVE ]", "Every 5 swipes boosts your MULTIPLIER up to 4x!\nFilling the ⚡ OVERDRIVE bar to 100% triggers Frenzy!", false, false, col)
 
 		3:
 			# Step 3: Hold Squares
 			current_target_direction = "down"
 			var col: Color = direction_colors.get("down", Color(0.82, 0.72, 0.06))
 			_last_target_color = col
-			var style := _center_panel_style.duplicate()
-			style.bg_color = col
-			center_square.add_theme_stylebox_override("panel", style)
-			center_square.queue_redraw()
 			is_hold_turn = true
 			_setup_hold_turn_indicator()
 			_apply_board_colors()
 			_pulse_center()
-			_walkthrough_overlay.set_step(3, "down", "[ STEP 3 OF 6 - HOLD SQUARES ]", "When you see pulsing brackets:\nSWIPE and HOLD your finger until the charge ring fills!", true, false, col)
+			_walkthrough_overlay.set_step(3, "down", "[ STEP 3 OF 9 - HOLD SQUARES ]", "When you see pulsing brackets:\nSWIPE and HOLD your finger until the charge ring fills!", true, false, col)
 
 		4:
-			# Step 4: Frenzy Power-Up
+			# Step 4: 2x Double-Dash Rush (Rapid 2-Hit Combo)
+			current_target_direction = "left"
+			is_double_turn = true
+			double_turn_step = 1
+			var col: Color = direction_colors.get("left", Color(0.10, 0.70, 0.38))
+			_last_target_color = col
+			_setup_double_turn_indicator()
+			_apply_board_colors()
+			_pulse_center()
+			_walkthrough_overlay.set_step(4, "left", "[ STEP 4 OF 9 - 2X DOUBLE-DASH RUSH ]", "Twin rings mean a 2-STEP RUSH! Swipe LEFT (1/2),\nthen immediately swipe the 2nd color for 2.5x points!", false, false, col)
+
+		5:
+			# Step 5: Frenzy Power-Up
 			if is_frenzy_active:
 				_end_frenzy_mode()
 			current_target_direction = "up"
 			var col: Color = direction_colors.get("up", Color(0.88, 0.22, 0.35))
 			_last_target_color = col
-			var style := _center_panel_style.duplicate()
-			style.bg_color = col
-			center_square.add_theme_stylebox_override("panel", style)
-			center_square.queue_redraw()
 			powerup_square_dir = "left"
 			powerup_type = "frenzy"
 			_apply_board_colors()
 			_pulse_center()
-			_walkthrough_overlay.set_step(4, "left", "[ STEP 4 OF 6 - FRENZY POWER-UP ]", "Swipe into the LIGHTNING square!\nFrenzy unleashes rapid-fire scoring across all squares!", false, false, col)
+			_walkthrough_overlay.set_step(5, "left", "[ STEP 5 OF 9 - FRENZY POWER-UP ]", "Swipe into the LIGHTNING square!\nFrenzy unleashes rapid-fire scoring across all squares!", false, false, col)
 
-		5:
-			# Step 5: Time Booster (+5s)
+		6:
+			# Step 6: Time Booster (+5s)
 			if is_frenzy_active:
 				_end_frenzy_mode()
 			current_target_direction = "left"
 			var col: Color = direction_colors.get("left", Color(0.10, 0.70, 0.38))
 			_last_target_color = col
-			var style := _center_panel_style.duplicate()
-			style.bg_color = col
-			center_square.add_theme_stylebox_override("panel", style)
-			center_square.queue_redraw()
 			powerup_square_dir = "right"
 			powerup_type = "frenzy_boost"
 			_apply_board_colors()
 			_pulse_center()
-			_walkthrough_overlay.set_step(5, "right", "[ STEP 5 OF 6 - TIME BOOSTER ]", "Swipe the BOOSTER to store +5s extra time!\nBooster charges make your future Frenzy runs last longer!", false, false, col)
+			_walkthrough_overlay.set_step(6, "right", "[ STEP 6 OF 9 - TIME BOOSTER ]", "Swipe the CYAN BOOSTER (+) to store +5s extra time!\nBooster charges make your future Frenzy runs last longer!", false, false, col)
 
-		6:
-			# Step 6: Board Shuffle (Whirlwind 360° spin)
+		7:
+			# Step 7: Aegis Neon Shield (Mistake & Streak Protection)
+			if is_frenzy_active:
+				_end_frenzy_mode()
+			has_shield = false
+			_update_shield_ui()
+			current_target_direction = "down"
+			var col: Color = direction_colors.get("down", Color(0.82, 0.72, 0.06))
+			_last_target_color = col
+			powerup_square_dir = "up"
+			powerup_type = "shield"
+			_apply_board_colors()
+			_pulse_center()
+			_walkthrough_overlay.set_step(7, "up", "[ STEP 7 OF 9 - AEGIS NEON SHIELD ]", "Swipe the EMERALD SHIELD to activate a barrier!\nIt absorbs your next mistake or timeout & saves your streak!", false, false, Color(0.15, 1.0, 0.78))
+
+		8:
+			# Step 8: Neon Spark Jackpot (+5 Sparks)
+			current_target_direction = "up"
+			var col: Color = direction_colors.get("up", Color(0.88, 0.22, 0.35))
+			_last_target_color = col
+			powerup_square_dir = "down"
+			powerup_type = "spark_jackpot"
+			_apply_board_colors()
+			_pulse_center()
+			_walkthrough_overlay.set_step(8, "down", "[ STEP 8 OF 9 - NEON SPARK JACKPOT ]", "Swipe the GOLDEN DIAMOND for +5 Neon Sparks!\nSpend Sparks in the Shop on Trails, Skins & SFX!", false, false, Color(1.0, 0.85, 0.2))
+
+		9:
+			# Step 9: Board Shuffle (Whirlwind 360° spin)
+			has_shield = false
+			_update_shield_ui()
 			_remap_directions()
 			current_target_direction = "up"
 			var col: Color = direction_colors.get("up", Color(0.88, 0.22, 0.35))
 			_last_target_color = col
-			var style := _center_panel_style.duplicate()
-			style.bg_color = col
-			center_square.add_theme_stylebox_override("panel", style)
-			center_square.queue_redraw()
+			_apply_board_colors()
 			_pulse_center()
-			_walkthrough_overlay.set_step(6, "up", "[ STEP 6 OF 6 - BOARD SHUFFLE ]", "The board spins and colors swap periodically!\nRe-orient and swipe the new matching position!", false, false, col)
+			_walkthrough_overlay.set_step(9, "up", "[ STEP 9 OF 9 - BOARD SHUFFLE ]", "The board spins and colors swap periodically!\nRe-orient and swipe the new matching position!", false, false, col)
 
-		7:
-			# Step 7: Ready to Play / Completed Briefing
+		10:
+			# Step 10: Ready to Play / Completed Briefing
 			if is_frenzy_active:
 				_end_frenzy_mode()
+			has_shield = false
+			_update_shield_ui()
 			_apply_board_colors()
 			if _walkthrough_from_options:
 				_walkthrough_overlay.show_final_step("TUTORIAL COMPLETE!", "You've mastered all mechanics of Music Square!\nTap below or anywhere on screen to return to Options.", "BACK TO OPTIONS")
 			else:
-				_walkthrough_overlay.show_final_step("YOU'RE READY TO PLAY!", "3 Hearts: Wrong swipes or timing out loses a heart.\nMultipliers & Speed increase as you score higher!", "LET'S PLAY!")
+				_walkthrough_overlay.show_final_step("YOU'RE READY TO PLAY!", "3 Hearts: Wrong swipes or timing out loses a heart.\nChain Blazing swipes, Shields & Overdrive for massive scores!", "LET'S PLAY!")
 
 
 func _handle_walkthrough_swipe(direction: String) -> void:
@@ -4562,14 +4969,15 @@ func _handle_walkthrough_swipe(direction: String) -> void:
 		return
 
 	match _walkthrough_step:
-		1: # Step 1: Color Match
+		1: # Step 1: Color Match & Blazing Timing
 			if direction == current_target_direction:
 				_walkthrough_advancing = true
-				sfx.play("correct")
+				sfx.play_pitched("correct", 1.08)
 				_haptic_tap()
-				_burst_particles(_get_board_center(direction), direction_colors.get(direction, Color.WHITE), 12)
+				_add_fever_charge(25.0)
+				_burst_particles(_get_board_center(direction), direction_colors.get(direction, Color.WHITE), 14)
 				_flash_square(direction, Color.WHITE)
-				_walkthrough_overlay.flash_success("PERFECT!")
+				_walkthrough_overlay.flash_success("BLAZING! 1.5x!")
 				_advance_walkthrough()
 			else:
 				sfx.play("wrong")
@@ -4578,17 +4986,18 @@ func _handle_walkthrough_swipe(direction: String) -> void:
 				_shake_screen(3.0)
 				_walkthrough_overlay.flash_reminder("Swipe toward the matching square!")
 
-		2: # Step 2: Streak & Multiplier
+		2: # Step 2: Streak, Multiplier & Overdrive Bar
 			if direction == current_target_direction:
 				_walkthrough_advancing = true
 				sfx.play("combo")
 				_haptic_tap()
 				streak = 5
+				_add_fever_charge(35.0)
 				_update_combo_hud()
 				_update_streak_visuals()
 				_burst_particles(_get_board_center(direction), direction_colors.get(direction, Color.WHITE), 14)
 				_flash_square(direction, Color(1.5, 0.35, 0.85, 1.0))
-				_walkthrough_overlay.flash_success("x2 MULTIPLIER!")
+				_walkthrough_overlay.flash_success("x2 MULTIPLIER & +FEVER!")
 				_advance_walkthrough()
 			else:
 				sfx.play("wrong")
@@ -4601,14 +5010,52 @@ func _handle_walkthrough_swipe(direction: String) -> void:
 			else:
 				_walkthrough_overlay.flash_reminder("Swipe DOWN and HOLD!")
 
-		4: # Step 4: Frenzy Power-Up
+		4: # Step 4: 2x Double-Dash Rush (1/2 -> 2/2)
+			if double_turn_step == 1:
+				if direction == current_target_direction:
+					double_turn_step = 2
+					current_target_direction = "right"
+					var next_col: Color = direction_colors.get(current_target_direction, Color(0.12, 0.46, 0.88))
+					_last_target_color = next_col
+					_apply_board_colors()
+					_pulse_center()
+					_setup_double_turn_indicator()
+					sfx.play_pitched("combo", 1.18)
+					_haptic_tap()
+					_burst_particles(_get_board_center(direction), direction_colors.get(direction, Color.WHITE), 12)
+					_flash_square(direction, Color.WHITE)
+					_walkthrough_overlay.set_step(4, "right", "[ STEP 4 OF 9 - 2X RUSH (2/2)! ]", "1ST HIT LOCKED! Center shifted to BLUE —\nnow swipe RIGHT to complete the 2.5x Double Rush!", false, false, next_col)
+					_walkthrough_overlay.flash_success("1/2 HIT! NOW SWIPE RIGHT!")
+				else:
+					sfx.play("wrong")
+					_flash_center_red()
+					_walkthrough_overlay.flash_reminder("Swipe LEFT for step 1/2!")
+			else:
+				if direction == current_target_direction:
+					_walkthrough_advancing = true
+					is_double_turn = false
+					double_turn_step = 0
+					_cleanup_double_turn_ui()
+					center_square.queue_redraw()
+					sfx.play_pitched("unlock", 1.15)
+					_haptic_celebration()
+					_burst_particles(_get_board_center(direction), Color(1.0, 0.4, 0.9), 18)
+					_flash_square(direction, Color(1.0, 0.9, 0.2, 0.95))
+					_walkthrough_overlay.flash_success("2X RUSH COMPLETE! (2.5x PTS!)")
+					_advance_walkthrough()
+				else:
+					sfx.play("wrong")
+					_flash_center_red()
+					_walkthrough_overlay.flash_reminder("Swipe RIGHT to finish 2/2!")
+
+		5: # Step 5: Frenzy Power-Up
 			if not is_frenzy_active:
 				if direction == "left":
 					sfx.play("combo")
 					_burst_particles(_get_board_center("left"), Color(1.8, 1.4, 0.2), 16)
 					_activate_frenzy_mode()
 					_walkthrough_frenzy_swipes_done = 0
-					_walkthrough_overlay.set_step(4, "", "[ STEP 4 OF 6 - FRENZY ACTIVE! ]", "Frenzy unlocked! Swipe ANY direction for massive points!\nSwipe any square now!", false, true, Color(1.35, 1.15, 0.15))
+					_walkthrough_overlay.set_step(5, "", "[ STEP 5 OF 9 - FRENZY ACTIVE! ]", "Frenzy unlocked! Swipe ANY direction for massive points!\nSwipe any square now!", false, true, Color(1.35, 1.15, 0.15))
 					_walkthrough_overlay.flash_success("FRENZY UNLEASHED!")
 				else:
 					_walkthrough_overlay.flash_reminder("Swipe toward the LIGHTNING square!")
@@ -4624,7 +5071,7 @@ func _handle_walkthrough_swipe(direction: String) -> void:
 				frenzy_exit_buffer = 0.0
 				_advance_walkthrough()
 
-		5: # Step 5: Time Booster (+5s)
+		6: # Step 6: Time Booster (+5s)
 			if direction == "right":
 				_walkthrough_advancing = true
 				_add_frenzy_charge()
@@ -4636,7 +5083,43 @@ func _handle_walkthrough_swipe(direction: String) -> void:
 			else:
 				_walkthrough_overlay.flash_reminder("Swipe toward the BOOSTER square!")
 
-		6: # Step 6: Board Shuffle
+		7: # Step 7: Aegis Neon Shield
+			if direction == "up":
+				_walkthrough_advancing = true
+				has_shield = true
+				_update_shield_ui()
+				powerup_square_dir = ""
+				powerup_type = ""
+				if direction_squares.has("up") and is_instance_valid(direction_squares["up"]):
+					direction_squares["up"].queue_redraw()
+				if center_square != null and is_instance_valid(center_square):
+					center_square.queue_redraw()
+				sfx.play("shield")
+				_haptic_celebration()
+				_burst_particles(_get_board_center("up"), Color(0.15, 1.0, 0.78), 18)
+				_flash_square("up", Color(0.2, 1.0, 0.85, 0.9))
+				_walkthrough_overlay.flash_success("🛡️ SHIELD READY!")
+				_advance_walkthrough()
+			else:
+				_walkthrough_overlay.flash_reminder("Swipe UP toward the EMERALD SHIELD!")
+
+		8: # Step 8: Spark Jackpot (+5 Sparks) & Heart Surge
+			if direction == "down":
+				_walkthrough_advancing = true
+				powerup_square_dir = ""
+				powerup_type = ""
+				if direction_squares.has("down") and is_instance_valid(direction_squares["down"]):
+					direction_squares["down"].queue_redraw()
+				sfx.play("unlock")
+				_haptic_celebration()
+				_burst_particles(_get_board_center("down"), Color(1.0, 0.88, 0.2), 20)
+				_flash_square("down", Color(1.0, 0.9, 0.25, 0.9))
+				_walkthrough_overlay.flash_success("💎 JACKPOT! +5 SPARKS!")
+				_advance_walkthrough()
+			else:
+				_walkthrough_overlay.flash_reminder("Swipe DOWN toward the GOLDEN DIAMOND!")
+
+		9: # Step 9: Board Shuffle
 			if direction == current_target_direction:
 				_walkthrough_advancing = true
 				sfx.play("unlock")
@@ -4647,7 +5130,7 @@ func _handle_walkthrough_swipe(direction: String) -> void:
 			else:
 				_walkthrough_overlay.flash_reminder("Look at the center color on new layout!")
 
-		7: # Step 7: Ready to Play Briefing
+		10: # Step 10: Ready to Play Briefing
 			_walkthrough_advancing = true
 			_finish_walkthrough(false)
 
@@ -4667,6 +5150,15 @@ func _finish_walkthrough(skipped: bool = false) -> void:
 	_walkthrough_step = 0
 	settings.first_play = false
 	settings.save_data()
+
+	_cleanup_hold_ui()
+	_cleanup_double_turn_ui()
+	is_holding_active = false
+	is_hold_turn = false
+	is_double_turn = false
+	double_turn_step = 0
+	has_shield = false
+	_update_shield_ui()
 
 	if is_frenzy_active:
 		_end_frenzy_mode()
@@ -4860,6 +5352,13 @@ func _show_achievement_toast(ach: Dictionary) -> void:
 
 func _display_achievement_toast(ach: Dictionary) -> void:
 	sfx.play("unlock")
+	var hdr: String = str(ach.get("header", "BADGE UNLOCKED!"))
+	if hdr.begins_with("MISSION"):
+		sfx.play_voice("mission_complete", 82, 0.8)
+	elif hdr.begins_with("NEW "):
+		sfx.play_voice("new_unlock", 80, 0.8)
+	else:
+		sfx.play_voice("achievement_unlocked", 88, 0.8)
 	_haptic_celebration()
 
 	var toast := Panel.new()
@@ -5599,6 +6098,7 @@ func _game_over() -> void:
 	if not _tamper_flagged:
 		is_new_record = settings.update_high_score(score, best_streak_this_game)
 	if is_new_record:
+		sfx.play_voice("new_high_score", 100, 1.2)
 		_haptic_celebration()
 
 	# Update Daily Missions progress for this run (incremental if continuing after a revive)
@@ -5644,9 +6144,10 @@ func _game_over() -> void:
 	var m_sum: Dictionary = settings.get_daily_missions_summary()
 	var m_done: int = int(m_sum.get("done", 0))
 	var m_total: int = int(m_sum.get("total", 3))
+	var total_run_sparks_earned: int = mission_sparks_earned + sparks_collected_in_run
 	if _go_sparks_label != null and is_instance_valid(_go_sparks_label):
-		if mission_sparks_earned > 0:
-			_go_sparks_label.text = "+" + _format_sparks_compact(mission_sparks_earned) + " MISSION SPARKS!  |  TOTAL: " + _format_sparks_compact(settings.sparks)
+		if total_run_sparks_earned > 0:
+			_go_sparks_label.text = "+" + _format_sparks_compact(total_run_sparks_earned) + " SPARKS EARNED!  |  TOTAL: " + _format_sparks_compact(settings.sparks)
 			_go_sparks_label.add_theme_color_override("font_color", Color(0.30, 1.0, 0.55))
 		else:
 			_go_sparks_label.text = "MISSIONS: " + str(m_done) + "/" + str(m_total) + " DONE  |  SPARKS: " + _format_sparks_compact(settings.sparks)
@@ -5658,6 +6159,8 @@ func _game_over() -> void:
 		_go_double_sparks_btn.add_theme_color_override("font_color", Color(1.0, 0.92, 0.28))
 
 	frenzy_charges = 0
+	has_shield = false
+	_update_shield_ui()
 	if has_node("/root/AdManager"):
 		get_node("/root/AdManager").preload_rewarded_ad()
 	_update_frenzy_charge_ui()
@@ -5672,11 +6175,10 @@ func _game_over() -> void:
 		accuracy = clampf(float(total_correct) / float(total_swipes) * 100.0, 0.0, 100.0)
 	var best_rx_str := ("%.2fs" % fastest_reaction_this_game) if fastest_reaction_this_game < 900.0 else "--"
 	var hold_str := ("%.1fs" % longest_hold_this_game) if longest_hold_this_game > 0.0 else "--"
-	stats_label.text = "Streak: %d   |   Accuracy: %d%%\nCorrect: %d / %d   |   Fastest: %s\nFrenzies: %d   |   Max Hold: %s" % [
+	stats_label.text = "Streak: %d   |   Accuracy: %d%%\nPerfect Chain: %d   |   Fastest: %s\nFrenzies: %d   |   Max Hold: %s" % [
 		best_streak_this_game,
 		int(round(accuracy)),
-		total_correct,
-		total_swipes,
+		best_perfect_streak_this_game,
 		best_rx_str,
 		frenzies_triggered_this_game,
 		hold_str
@@ -6063,8 +6565,12 @@ func _process_visual_juice(delta: float) -> void:
 		streak_energy = 1.0
 
 	if _bg_shader_mat != null:
-		_bg_shader_mat.set_shader_parameter("audio_pulse", bg_pulse)
-		_bg_shader_mat.set_shader_parameter("streak_energy", streak_energy)
+		if absf(bg_pulse - _last_shader_audio_pulse) > 0.002:
+			_last_shader_audio_pulse = bg_pulse
+			_bg_shader_mat.set_shader_parameter("audio_pulse", bg_pulse)
+		if absf(streak_energy - _last_shader_streak_energy) > 0.002:
+			_last_shader_streak_energy = streak_energy
+			_bg_shader_mat.set_shader_parameter("streak_energy", streak_energy)
 
 	if settings != null and settings.selected_skin == "equalizer" and state == settings.GameState.PLAYING:
 		for dir: String in direction_squares:
@@ -6103,11 +6609,14 @@ func _process(delta: float) -> void:
 
 		if _hold_pts_label != null and is_instance_valid(_hold_pts_label):
 			var mult := _current_combo_multiplier()
+			var new_hold_text: String
 			if hold_duration >= 1.9:
-				_hold_pts_label.text = "⚡ MAXIMUM CHARGE! +" + _format_number_with_commas(current_pts * mult) + " PTS ⚡"
+				new_hold_text = "⚡ MAXIMUM CHARGE! +" + _format_number_with_commas(current_pts * mult) + " PTS ⚡"
 				_hold_pts_label.add_theme_color_override("font_color", Color(1.0, 0.95, 0.3))
 			else:
-				_hold_pts_label.text = "HOLD CHARGE: " + str(snappedf(hold_duration, 0.1)) + "s / 2s  |  +" + _format_number_with_commas(current_pts * mult) + " PTS"
+				new_hold_text = "HOLD CHARGE: " + str(snappedf(hold_duration, 0.1)) + "s / 2s  |  +" + _format_number_with_commas(current_pts * mult) + " PTS"
+			if _hold_pts_label.text != new_hold_text:
+				_hold_pts_label.text = new_hold_text
 
 		# Center square dynamic reactor scaling
 		if center_square != null and is_instance_valid(center_square):
@@ -6157,6 +6666,8 @@ func _process(delta: float) -> void:
 		return
 
 	if is_frenzy_active:
+		hold_exit_buffer = 0.0
+		frenzy_exit_buffer = 0.0
 		frenzy_time_left -= delta
 		frenzy_switch_timer += delta
 		if frenzy_switch_timer >= 1.0:
@@ -6164,7 +6675,9 @@ func _process(delta: float) -> void:
 			_pick_new_frenzy_special_square()
 
 		if _frenzy_hud_label != null and is_instance_valid(_frenzy_hud_label):
-			_frenzy_hud_label.text = "⚡ FRENZY: " + str(snappedf(maxf(0.0, frenzy_time_left), 0.1)) + "s  |  PINK = 3x! ⚡"
+			var new_frenzy_text := "⚡ FRENZY: " + str(snappedf(maxf(0.0, frenzy_time_left), 0.1)) + "s  |  PINK = 3x! ⚡"
+			if _frenzy_hud_label.text != new_frenzy_text:
+				_frenzy_hud_label.text = new_frenzy_text
 
 		if center_square != null:
 			center_square.scale = Vector2.ONE
@@ -6190,14 +6703,18 @@ func _process(delta: float) -> void:
 			var shrink_ratio: float = clampf(time_left_in_turn / current_time_limit, 0.4, 1.0)
 			center_square.scale = Vector2(shrink_ratio, shrink_ratio)
 
-		# Redraw hold square pulsing ring if this is a hold turn
-		if is_hold_turn:
+		# Redraw animated rings/halos (Hold, Double-Dash, Shield, or pulsing Power-Ups)
+		if is_hold_turn or is_double_turn or has_shield:
 			if center_square != null and is_instance_valid(center_square):
 				center_square.queue_redraw()
 			if current_target_direction in direction_squares:
 				var target_panel: Panel = direction_squares[current_target_direction]
 				if target_panel != null and is_instance_valid(target_panel):
 					target_panel.queue_redraw()
+		if powerup_square_dir != "" and powerup_square_dir in direction_squares:
+			var p_panel: Panel = direction_squares[powerup_square_dir]
+			if p_panel != null and is_instance_valid(p_panel):
+				p_panel.queue_redraw()
 
 		# Timeout check
 		if time_left_in_turn <= 0.0:
@@ -6205,12 +6722,14 @@ func _process(delta: float) -> void:
 
 
 func _calculate_turn_time_limit(is_hold: bool = false) -> float:
-	# Scales turn difficulty by decreasing time limit by 0.1s for every 500,000 points.
-	# Minimum reaction floors prevent impossible or negative timers in ultra late-game.
-	var reduction: float = float(score / 500000) * 0.1
+	# Smoothly scales tempo with both score and active streak so gameplay speeds up
+	# naturally as the player enters a rhythm flow-state, and breathes back on mistakes.
+	var score_reduction: float = (float(score) / 100000.0) * 0.035
+	var streak_reduction: float = minf(0.24, float(streak) * 0.0024)
+	var total_reduction: float = score_reduction + streak_reduction
 	if is_hold:
-		return maxf(1.5, 2.4 - reduction)
-	return maxf(0.6, GameSettings.INITIAL_TIME_LIMIT - reduction)
+		return maxf(1.45, 2.35 - total_reduction)
+	return maxf(0.62, GameSettings.INITIAL_TIME_LIMIT - total_reduction)
 
 
 func start_new_turn() -> void:
@@ -6231,14 +6750,17 @@ func start_new_turn() -> void:
 			turns_until_remap = _roll_remap_interval()
 			_remap_directions()
 
-	# 1. Reset previous turn's uncollected power-up and hold state
+	# 1. Reset previous turn's uncollected power-up, hold, and double-dash state
 	powerup_square_dir = ""
 	powerup_type = ""
 	_cleanup_hold_ui()
+	_cleanup_double_turn_ui()
 	is_holding_active = false
 	hold_duration = 0.0
+	is_double_turn = false
+	double_turn_step = 0
 
-	# 2. Dynamic time limit based on score (decreases by 0.1s every 500,000 points)
+	# 2. Dynamic time limit based on score & streak
 	current_time_limit = _calculate_turn_time_limit(false)
 	time_left_in_turn = current_time_limit
 	_turn_start_time = Time.get_ticks_msec() / 1000.0
@@ -6246,39 +6768,44 @@ func start_new_turn() -> void:
 	# 3. Set new target color
 	set_random_center_color()
 
-	# 4. Special Turn Mechanics: Frenzy, Frenzy +5s Booster, or Hold Turn (MUTUALLY EXCLUSIVE)
-	# Neither can spawn if Frenzy Mode is currently running, and only one special event can appear per turn.
+	# 4. Special Turn Mechanics (MUTUALLY EXCLUSIVE when not in Frenzy)
 	is_hold_turn = false
 	if not is_frenzy_active:
+		var center_color: Color = direction_colors.get(current_target_direction, Color(0, 0, 0, 0))
+		var valid_dirs: Array[String] = []
+		for d: String in direction_squares:
+			if not direction_colors[d].is_equal_approx(center_color):
+				valid_dirs.append(d)
 		var roll := randf()
-		# Roll 1: Frenzy trigger power-up (~2% chance)
-		if roll < 0.02:
-			var center_color: Color = direction_colors.get(current_target_direction, Color(0, 0, 0, 0))
-			var valid_dirs: Array = direction_squares.keys().filter(
-				func(d: String) -> bool:
-					return not direction_colors[d].is_equal_approx(center_color)
-			)
-			if valid_dirs.size() > 0:
-				powerup_square_dir = valid_dirs.pick_random()
-				powerup_type = "frenzy"
-				is_hold_turn = false
-		# Roll 2: Frenzy +5s Time Booster (5% chance: roll between 0.02 and 0.07)
-		elif roll < 0.07:
-			var center_color: Color = direction_colors.get(current_target_direction, Color(0, 0, 0, 0))
-			var valid_dirs: Array = direction_squares.keys().filter(
-				func(d: String) -> bool:
-					return not direction_colors[d].is_equal_approx(center_color)
-			)
-			if valid_dirs.size() > 0:
-				powerup_square_dir = valid_dirs.pick_random()
-				powerup_type = "frenzy_boost"
-				is_hold_turn = false
-		# Roll 3: Hold Turn (5% chance: roll between 0.07 and 0.12)
-		elif roll < 0.12:
+		# Roll 1: Frenzy trigger power-up (0.8% rare chance once score >= 100)
+		if roll < 0.008 and score >= 100 and valid_dirs.size() > 0:
+			powerup_square_dir = valid_dirs.pick_random()
+			powerup_type = "frenzy"
+		# Roll 2: Frenzy +5s Time Booster (2.2% chance)
+		elif roll < 0.030 and valid_dirs.size() > 0:
+			powerup_square_dir = valid_dirs.pick_random()
+			powerup_type = "frenzy_boost"
+		# Roll 3: Aegis Neon Shield (3.0% chance when unshielded)
+		elif roll < 0.060 and not has_shield and valid_dirs.size() > 0:
+			powerup_square_dir = valid_dirs.pick_random()
+			powerup_type = "shield"
+		# Roll 4: Neon Spark Jackpot (3.0% chance — instant +5 Sparks & score burst!)
+		elif roll < 0.090 and valid_dirs.size() > 0:
+			powerup_square_dir = valid_dirs.pick_random()
+			powerup_type = "spark_jackpot"
+		# Roll 5: Hold & Charge Turn (5.0% chance)
+		elif roll < 0.140:
 			is_hold_turn = true
 			current_time_limit = _calculate_turn_time_limit(true)
 			time_left_in_turn = current_time_limit
 			_setup_hold_turn_indicator()
+		# Roll 6: Double-Dash 2x Rush Turn (5.0% chance once score >= 150)
+		elif roll < 0.190 and score >= 150:
+			is_double_turn = true
+			double_turn_step = 1
+			current_time_limit = maxf(0.85, _calculate_turn_time_limit(false) * 1.08)
+			time_left_in_turn = current_time_limit
+			_setup_double_turn_indicator()
 
 	# 5. Apply board colors and symbols
 	_apply_board_colors()
@@ -6288,29 +6815,36 @@ func start_new_turn() -> void:
 
 
 func set_random_center_color() -> void:
+	if _center_live_style == null:
+		_center_live_style = _center_panel_style.duplicate() as StyleBoxFlat
+		center_square.add_theme_stylebox_override("panel", _center_live_style)
 	if is_frenzy_active:
-		var frenzy_style := _center_panel_style.duplicate()
-		frenzy_style.bg_color = Color(1.35, 1.15, 0.15)
-		center_square.add_theme_stylebox_override("panel", frenzy_style)
+		_center_live_style.bg_color = Color(1.35, 1.15, 0.15)
 		center_square.queue_redraw()
 		return
 
-	var directions := direction_colors.keys()
-	var candidates: Array = directions.filter(func(d): return direction_colors[d] != _last_target_color)
-	if candidates.size() > 0:
-		directions = candidates
+	var candidates: Array[String] = []
+	for d: String in direction_colors:
+		if direction_colors[d] != _last_target_color:
+			candidates.append(d)
+	if candidates.is_empty():
+		for d: String in direction_colors:
+			candidates.append(d)
 
-	current_target_direction = directions.pick_random()
+	current_target_direction = candidates.pick_random()
 	_last_target_color = direction_colors[current_target_direction]
 
-	var style := _center_panel_style.duplicate()
-	style.bg_color = _last_target_color
-	center_square.add_theme_stylebox_override("panel", style)
+	_center_live_style.bg_color = _last_target_color
 	center_square.queue_redraw()
 
 
-func _activate_frenzy_mode() -> void:
+func _activate_frenzy_mode(from_overdrive: bool = false) -> void:
 	is_frenzy_active = true
+	hold_exit_buffer = 0.0
+	frenzy_exit_buffer = 0.0
+	is_swiping = false
+	active_touch_index = -1
+	_center_scale_locked = false
 	var bonus_time: float = float(frenzy_charges) * 5.0
 	frenzy_time_left = 5.0 + bonus_time
 	var consumed_charges := frenzy_charges
@@ -6323,7 +6857,10 @@ func _activate_frenzy_mode() -> void:
 	powerup_type = ""
 	is_hold_turn = false
 	is_holding_active = false
+	is_double_turn = false
+	double_turn_step = 0
 	_cleanup_hold_ui()
+	_cleanup_double_turn_ui()
 	_frenzy_count_this_game += 1
 	frenzies_triggered_this_game += 1
 	_audio_pulse = 1.0
@@ -6336,9 +6873,18 @@ func _activate_frenzy_mode() -> void:
 	_pick_new_frenzy_special_square()
 
 	sfx.play("combo")
+	if from_overdrive:
+		sfx.play_voice("overdrive", 85, 1.2)
+	else:
+		sfx.play_voice("frenzy_mode", 80, 1.2)
 	_haptic_frenzy()
 
-	if consumed_charges > 0:
+	if from_overdrive:
+		if consumed_charges > 0:
+			_show_remap_banner("🔥 OVERDRIVE FRENZY +" + str(int(bonus_time)) + "s! 🔥")
+		else:
+			_show_remap_banner("🔥 OVERDRIVE FRENZY! 🔥")
+	elif consumed_charges > 0:
 		_show_remap_banner("⚡ FRENZY +" + str(int(bonus_time)) + "s BOOSTED! ⚡")
 	else:
 		_show_remap_banner("⚡ FRENZY MODE! ⚡")
@@ -6484,16 +7030,7 @@ func _animate_remap_squares() -> void:
 		if panel != null and is_instance_valid(panel):
 			panel.rotation_degrees = 0.0
 			panel.scale = Vector2.ONE
-
-			# High-energy glowing neon border during the spin
-			var flash_style := _panel_style.duplicate()
-			var current_col: Color = direction_colors.get(dir, Color(0.2, 0.9, 1.0))
-			flash_style.bg_color = current_col.lightened(0.35)
-			flash_style.set_border_width_all(3)
-			flash_style.set_border_color(Color(2.0, 2.0, 2.0, 1.0))
-			flash_style.set_shadow_color(Color(0.2, 0.9, 1.0, 0.85))
-			flash_style.set_shadow_size(18)
-			panel.add_theme_stylebox_override("panel", flash_style)
+	_apply_board_colors()
 
 	# Set pivot to the exact geometric center of the cross board (center_square)
 	var board_center: Vector2 = center_square.position + center_square.size / 2.0
@@ -6735,7 +7272,7 @@ func _finish_hold_mode() -> void:
 		return
 
 	if _is_walkthrough_active and _walkthrough_step == 3:
-		var final_dur := clampf(hold_duration, 0.0, MAX_HOLD_DURATION)
+		var walkthrough_hold_dur := clampf(hold_duration, 0.0, MAX_HOLD_DURATION)
 		is_holding_active = false
 		hold_duration = 0.0
 		_center_scale_locked = false
@@ -6749,7 +7286,7 @@ func _finish_hold_mode() -> void:
 			direction_squares["down"].queue_redraw()
 		_cleanup_hold_ui()
 
-		if final_dur >= 1.0:
+		if walkthrough_hold_dur >= 1.0:
 			is_hold_turn = false
 			_walkthrough_advancing = true
 			sfx.play("unlock")
@@ -6818,6 +7355,7 @@ func _finish_hold_mode() -> void:
 
 	if is_max:
 		sfx.play("unlock")
+		sfx.play_voice("max_charge", 65, 1.5)
 		_haptic_frenzy()
 		_show_persistent_label("MAX CHARGE! +" + str(earned), target_pos, Color(1.0, 0.9, 0.2), true)
 	else:
@@ -6829,7 +7367,13 @@ func _finish_hold_mode() -> void:
 		_show_persistent_label("+" + str(earned) + " (" + str(snappedf(final_dur, 0.1)) + "s HOLD)", target_pos, col, true)
 
 	_cleanup_hold_ui()
+	_add_fever_charge(8.0 if is_max else 4.0)
 	_check_in_game_achievements()
+
+	# If Overdrive Fever reached 100% from Hold completion, unleash Frenzy!
+	if fever_meter >= 100.0 and not is_frenzy_active:
+		fever_meter = 0.0
+		_activate_frenzy_mode(true)
 
 	# Start next turn immediately so hold color never lingers!
 	start_new_turn()
@@ -6844,6 +7388,43 @@ func _cleanup_hold_ui() -> void:
 		_hold_hud_container = null
 	_hold_progress_bar = null
 	_hold_pts_label = null
+
+
+func _setup_double_turn_indicator() -> void:
+	if _double_indicator_label == null or not is_instance_valid(_double_indicator_label):
+		_double_indicator_label = Label.new()
+		_double_indicator_label.name = "DoubleIndicatorLabel"
+		var arcade_font := _make_arcade_font(0.6)
+		if arcade_font != null:
+			_double_indicator_label.add_theme_font_override("font", arcade_font)
+		_double_indicator_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_double_indicator_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		_double_indicator_label.add_theme_font_size_override("font_size", 18)
+		_double_indicator_label.add_theme_color_override("font_color", Color(1.5, 0.95, 0.25))
+		_double_indicator_label.add_theme_color_override("font_outline_color", Color(0.16, 0.04, 0.22, 1.0))
+		_double_indicator_label.add_theme_constant_override("outline_size", 5)
+		_double_indicator_label.anchor_left = 0.0
+		_double_indicator_label.anchor_right = 1.0
+		_double_indicator_label.offset_left = 0.0
+		_double_indicator_label.offset_right = 0.0
+		_double_indicator_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
+		_double_indicator_label.z_index = 82
+		var hud := $GameScreen/GameHUD
+		if hud != null:
+			hud.add_child(_double_indicator_label)
+
+	var mid_y: float = _get_hud_mid_zone_y()
+	_double_indicator_label.offset_top = mid_y - 16.0
+	_double_indicator_label.offset_bottom = mid_y + 16.0
+	_double_indicator_label.text = "⚡ 2x DOUBLE RUSH! (1/2) ⚡"
+	_double_indicator_label.add_theme_color_override("font_color", Color(1.5, 0.95, 0.25))
+	_double_indicator_label.visible = true
+
+
+func _cleanup_double_turn_ui() -> void:
+	if _double_indicator_label != null and is_instance_valid(_double_indicator_label):
+		_double_indicator_label.queue_free()
+		_double_indicator_label = null
 
 
 # =====================================================
@@ -6972,13 +7553,13 @@ func _handle_game_input(event: InputEvent) -> void:
 	if _is_walkthrough_active:
 		hold_exit_buffer = 0.0
 		frenzy_exit_buffer = 0.0
-		if _walkthrough_step == 7:
+		if _walkthrough_step == 10:
 			if (event is InputEventScreenTouch and event.pressed) or (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
 				_finish_walkthrough(false)
 				return
 
-	# 0. Block input during post-hold grace cooldown to prevent accidental swipes
-	if hold_exit_buffer > 0.0:
+	# 0. Block input during post-hold grace cooldown to prevent accidental swipes (never block during Frenzy)
+	if hold_exit_buffer > 0.0 and not is_frenzy_active:
 		if event is InputEventMouseButton and not event.pressed:
 			is_swiping = false
 		elif event is InputEventScreenTouch and not event.pressed:
@@ -7003,7 +7584,19 @@ func _handle_game_input(event: InputEvent) -> void:
 		return
 
 	# 2. Continuous drag detection for HOLD turns & motion trail logging
-	if is_swiping and (event is InputEventMouseMotion or event is InputEventScreenDrag):
+	if not is_swiping:
+		if event is InputEventMouseMotion and (event.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
+			touch_start_position = event.position
+			is_swiping = true
+			_trail_points.clear()
+			_trail_points.append({"pos": event.position, "time": Time.get_ticks_msec() / 1000.0})
+		elif event is InputEventScreenDrag:
+			active_touch_index = event.index
+			touch_start_position = event.position
+			is_swiping = true
+			_trail_points.clear()
+			_trail_points.append({"pos": event.position, "time": Time.get_ticks_msec() / 1000.0})
+	elif event is InputEventMouseMotion or event is InputEventScreenDrag:
 		_trail_points.append({"pos": event.position, "time": Time.get_ticks_msec() / 1000.0})
 
 	if is_swiping and is_hold_turn and not is_holding_active:
@@ -7040,14 +7633,12 @@ func _handle_game_input(event: InputEvent) -> void:
 
 	elif event is InputEventScreenTouch:
 		if event.pressed:
-			if is_swiping:
-				return
 			active_touch_index = event.index
 			touch_start_position = event.position
 			is_swiping = true
 			_trail_points.clear()
 			_trail_points.append({"pos": event.position, "time": Time.get_ticks_msec() / 1000.0})
-		elif is_swiping and event.index == active_touch_index:
+		elif is_swiping and (event.index == active_touch_index or active_touch_index == -1):
 			_trail_points.append({"pos": event.position, "time": Time.get_ticks_msec() / 1000.0})
 			is_swiping = false
 			active_touch_index = -1
@@ -7117,8 +7708,8 @@ func _on_swipe(direction: String) -> void:
 		_handle_walkthrough_swipe(direction)
 		return
 
-	# Ignore swipes during post-frenzy or post-hold grace buffer
-	if frenzy_exit_buffer > 0.0 or hold_exit_buffer > 0.0:
+	# Ignore swipes during post-frenzy or post-hold grace buffer (never ignore during active Frenzy)
+	if not is_frenzy_active and (frenzy_exit_buffer > 0.0 or hold_exit_buffer > 0.0):
 		return
 
 	# Clear any point label from the previous turn before showing a new one
@@ -7137,11 +7728,15 @@ func _on_swipe(direction: String) -> void:
 			powerup_square_dir = ""
 			powerup_type = ""
 
-		# Activate frenzy mode BEFORE _on_correct_swipe so all styles & flash callbacks evaluate with is_frenzy_active == true
+		# Activate frenzy mode or apply power-up BEFORE _on_correct_swipe so all styles & flash callbacks evaluate with updated state
 		if p_type == "frenzy":
 			_activate_frenzy_mode()
 		elif p_type == "frenzy_boost":
 			_add_frenzy_charge()
+		elif p_type == "shield":
+			_activate_shield()
+		elif p_type == "spark_jackpot":
+			_collect_spark_jackpot()
 
 		_on_correct_swipe(direction, is_powerup_hit, p_type)
 	else:
@@ -7150,17 +7745,48 @@ func _on_swipe(direction: String) -> void:
 
 func _on_correct_swipe(swiped_dir: String = "", is_powerup: bool = false, powerup_hit_type: String = "") -> void:
 	var is_super_frenzy_hit: bool = (is_frenzy_active and swiped_dir != "" and swiped_dir == frenzy_special_dir)
+	var reaction_time: float = (Time.get_ticks_msec() / 1000.0) - _turn_start_time
+	var speed_ratio := clampf(time_left_in_turn / maxf(0.1, current_time_limit), 0.0, 1.0)
 
-	var speed_ratio := time_left_in_turn / current_time_limit
+	# --- Rhythm-Arcade Timing Judgments (BLAZING / PERFECT / CLUTCH SAVE) ---
+	var is_blazing: bool = false
+	var is_perfect: bool = false
+	var is_clutch_save: bool = false
+
+	if not is_frenzy_active and not is_powerup:
+		if reaction_time <= 0.28 or speed_ratio >= 0.82:
+			is_blazing = true
+			perfect_streak += 1
+		elif reaction_time <= 0.42 or speed_ratio >= 0.70:
+			is_perfect = true
+			perfect_streak += 1
+		elif time_left_in_turn <= 0.22 or speed_ratio <= 0.16:
+			is_clutch_save = true
+			perfect_streak = 0
+		else:
+			perfect_streak = 0
+		if perfect_streak > best_perfect_streak_this_game:
+			best_perfect_streak_this_game = perfect_streak
+
 	var base_pts: int
 	if is_super_frenzy_hit:
 		base_pts = 250
 	elif is_frenzy_active:
 		base_pts = 100
+	elif powerup_hit_type == "spark_jackpot":
+		base_pts = 500
+	elif powerup_hit_type == "shield":
+		base_pts = 150
 	else:
 		base_pts = settings.BASE_CORRECT_POINTS
 
 	var earned: int = base_pts + int(speed_ratio * settings.SPEED_BONUS_MAX)
+	if is_blazing:
+		earned = int(round(float(earned) * 1.5)) + mini(perfect_streak, 10) * 5
+	elif is_perfect:
+		earned = int(round(float(earned) * 1.25)) + mini(perfect_streak, 10) * 3
+	elif is_clutch_save:
+		earned += 40
 
 	streak += 1
 	if streak > best_streak_this_game:
@@ -7173,11 +7799,38 @@ func _on_correct_swipe(swiped_dir: String = "", is_powerup: bool = false, poweru
 		earned *= 3
 	elif is_frenzy_active:
 		earned *= 2
+	elif is_double_turn and double_turn_step == 2 and not is_powerup:
+		earned = int(round(float(earned) * 2.5))
+
+	# --- Streak Milestone Rewards (Every 50 Streak!) ---
+	var is_streak_milestone: bool = (streak > 0 and streak % 50 == 0)
+	if is_streak_milestone:
+		var milestone_pts: int = 1000 * mult
+		earned += milestone_pts
+		if not _tamper_flagged and settings != null:
+			settings.add_sparks(3)
+			sparks_collected_in_run += 3
+			_update_sparks_displays()
+		if streak == 100 and not has_shield:
+			_activate_shield(true)
 
 	score += earned
 	total_correct += 1
 	if total_swipes < total_correct:
 		total_swipes = total_correct
+
+	# Charge Overdrive Fever Meter (when not currently in Frenzy)
+	if not is_frenzy_active:
+		var fever_gain: float = 1.2
+		if is_blazing:
+			fever_gain = 2.5
+		elif is_perfect:
+			fever_gain = 1.8
+		elif is_clutch_save:
+			fever_gain = 2.0
+		if is_double_turn and double_turn_step == 2:
+			fever_gain += 3.5
+		_add_fever_charge(fever_gain)
 
 	# Track lightning-fast responses (turn solved in under 0.40s)
 	if (current_time_limit - time_left_in_turn) <= 0.40:
@@ -7190,37 +7843,57 @@ func _on_correct_swipe(swiped_dir: String = "", is_powerup: bool = false, poweru
 		_clutch_swipes_this_game = 0
 
 	# Track fastest reaction time this game
-	var reaction_time: float = (Time.get_ticks_msec() / 1000.0) - _turn_start_time
 	if reaction_time > 0.03 and reaction_time < fastest_reaction_this_game:
 		fastest_reaction_this_game = reaction_time
 
 	# Audio pulse impulse for background synthwave shader
-	_audio_pulse = minf(1.0, _audio_pulse + 0.65)
+	_audio_pulse = minf(1.0, _audio_pulse + (0.85 if is_blazing else 0.65))
 
 	# Combo level-up flash + HUD refresh
-	if streak > 0 and streak % settings.COMBO_HITS_PER_LEVEL == 0 and mult < settings.COMBO_MAX_MULTIPLIER:
+	if streak > 0 and streak % settings.COMBO_HITS_PER_LEVEL == 0 and mult <= settings.COMBO_MAX_MULTIPLIER:
 		_combo_level_up_flash()
+		if streak == settings.COMBO_HITS_PER_LEVEL * (settings.COMBO_MAX_MULTIPLIER - 1):
+			sfx.play_voice("combo_max", 62, 2.0)
 	_update_combo_hud()
 	_update_streak_visuals()
+
+	# --- Announcer Voice Callouts for Streak Milestones & Skill Highlights ---
+	if streak > 0 and streak % 100 == 0:
+		sfx.play_voice("legendary", 95, 2.0)
+		_show_remap_banner("👑 " + str(streak) + " STREAK! LEGENDARY! 👑")
+	elif is_streak_milestone:
+		sfx.play_voice("godlike", 90, 2.0)
+		_show_remap_banner("⚡ " + str(streak) + " STREAK! GODLIKE! +3 SPARKS ⚡")
+	elif streak == 25:
+		sfx.play_voice("unstoppable", 70, 2.0)
+		_show_remap_banner("🔥 25 STREAK! UNSTOPPABLE! 🔥")
+	elif is_double_turn and double_turn_step == 2 and not is_powerup:
+		sfx.play_voice("double_dash", 58, 1.8)
+	elif is_clutch_save:
+		sfx.play_voice("clutch_save", 52, 4.0)
 
 	# In-game achievement verification
 	_check_in_game_achievements()
 
-	# Sound & Haptics
-	if powerup_hit_type == "frenzy_boost":
+	# --- Dynamic Musical Pitch-Shifted Audio & Haptics ---
+	var streak_pitch: float = 1.0 + float(streak % 16) * 0.022 + (0.05 if perfect_streak >= 3 else 0.0)
+	if powerup_hit_type == "frenzy_boost" or powerup_hit_type == "spark_jackpot":
 		sfx.play("unlock")
+		_haptic_celebration()
+	elif powerup_hit_type == "shield":
+		sfx.play("shield")
 		_haptic_celebration()
 	elif is_super_frenzy_hit:
 		sfx.play("unlock")
 		_haptic_celebration()
 	elif is_frenzy_active or is_powerup:
-		sfx.play("combo")
+		sfx.play_pitched("combo", 1.0 + float(streak % 12) * 0.028)
 		_haptic_combo()
 	else:
-		sfx.play("correct")
+		sfx.play_pitched("correct", streak_pitch)
 		var is_combo_hit := streak > 0 and streak % 5 == 0
-		if is_combo_hit:
-			sfx.play("combo")
+		if is_combo_hit or is_streak_milestone or (is_double_turn and double_turn_step == 2):
+			sfx.play_pitched("combo", 1.0 + float(mult - 1) * 0.08)
 			_haptic_combo()
 		else:
 			_haptic_correct()
@@ -7232,6 +7905,10 @@ func _on_correct_swipe(swiped_dir: String = "", is_powerup: bool = false, poweru
 	var popup_text := "+" + _format_number_with_commas(earned)
 	if powerup_hit_type == "frenzy_boost":
 		popup_text = "⚡ +5s FRENZY CHARGE! ⚡"
+	elif powerup_hit_type == "shield":
+		popup_text = "🛡️ SHIELD ACTIVE! +" + _format_number_with_commas(earned)
+	elif powerup_hit_type == "spark_jackpot":
+		popup_text = "💎 +5 SPARKS! +" + _format_number_with_commas(earned)
 	elif is_super_frenzy_hit:
 		var total_mult := mult * 3
 		popup_text = "⚡ SUPER! +" + _format_number_with_commas(earned) + " x" + str(total_mult) + " ⚡"
@@ -7240,42 +7917,69 @@ func _on_correct_swipe(swiped_dir: String = "", is_powerup: bool = false, poweru
 		popup_text += " x" + str(total_mult) + "!"
 	elif is_powerup:
 		popup_text = "FRENZY!"
+	elif is_streak_milestone:
+		popup_text = "🔥 " + str(streak) + " STREAK! +3⚡ +" + _format_number_with_commas(earned)
+	elif is_double_turn and double_turn_step == 1:
+		popup_text = "⚡ 1/2 HIT! +" + _format_number_with_commas(earned)
+	elif is_double_turn and double_turn_step == 2:
+		popup_text = "⚡ 2x RUSH! +" + _format_number_with_commas(earned) + "!"
+	elif is_blazing:
+		var chain_tag := (" 🔥x" + str(perfect_streak)) if perfect_streak >= 2 else ""
+		popup_text = "BLAZING!" + chain_tag + " +" + _format_number_with_commas(earned)
+	elif is_perfect:
+		popup_text = "PERFECT! +" + _format_number_with_commas(earned)
+	elif is_clutch_save:
+		popup_text = "CLUTCH SAVE! +" + _format_number_with_commas(earned)
 	elif mult > 1:
 		popup_text += " x" + str(mult)
 
 	var popup_color: Color
 	if powerup_hit_type == "frenzy_boost":
 		popup_color = Color(0.2, 0.95, 1.0, 1.0)
+	elif powerup_hit_type == "shield":
+		popup_color = Color(0.2, 1.0, 0.75, 1.0)
+	elif powerup_hit_type == "spark_jackpot":
+		popup_color = Color(1.5, 1.15, 0.2, 1.0)
 	elif is_super_frenzy_hit:
 		popup_color = FRENZY_SPECIAL_COLOR
-	elif is_frenzy_active or is_powerup:
+	elif is_frenzy_active or is_powerup or is_blazing or (is_double_turn and double_turn_step == 2):
 		popup_color = Color(1.8, 1.4, 0.2, 1.0)
+	elif is_clutch_save:
+		popup_color = Color(0.25, 1.0, 0.55, 1.0)
 	else:
 		var is_combo_hit := streak > 0 and streak % 5 == 0
-		popup_color = Color(1.5, 0.35, 0.85, 1.0) if is_combo_hit else Color(0.15, 0.95, 1.0, 1.0)
+		popup_color = Color(1.5, 0.35, 0.85, 1.0) if (is_combo_hit or is_perfect) else Color(0.15, 0.95, 1.0, 1.0)
 
 	var flash_color: Color
 	if powerup_hit_type == "frenzy_boost":
 		flash_color = Color(0.2, 0.95, 1.0, 0.95)
+	elif powerup_hit_type == "shield":
+		flash_color = Color(0.2, 1.0, 0.75, 0.95)
+	elif powerup_hit_type == "spark_jackpot":
+		flash_color = Color(1.5, 1.15, 0.2, 0.95)
 	elif is_super_frenzy_hit:
 		flash_color = Color(2.0, 0.5, 1.4, 0.9)
 	else:
-		flash_color = Color(1, 1, 1, 0.6)
+		flash_color = Color(1, 1, 1, 0.65)
 	_flash_square(target_dir, flash_color)
 
-	_show_persistent_label(popup_text, square_center, popup_color, is_frenzy_active or is_powerup)
+	_show_persistent_label(popup_text, square_center, popup_color, is_frenzy_active or is_powerup or is_blazing or (is_double_turn and double_turn_step == 2))
 
 	var particle_color: Color
 	if powerup_hit_type == "frenzy_boost":
 		particle_color = Color(0.2, 0.95, 1.0)
+	elif powerup_hit_type == "shield":
+		particle_color = Color(0.2, 1.0, 0.75)
+	elif powerup_hit_type == "spark_jackpot":
+		particle_color = Color(1.4, 1.05, 0.2)
 	elif is_super_frenzy_hit:
 		particle_color = FRENZY_SPECIAL_COLOR
-	elif is_frenzy_active or is_powerup:
+	elif is_frenzy_active or is_powerup or is_blazing:
 		particle_color = Color(1.2, 0.9, 0.1)
 	else:
 		particle_color = direction_colors.get(target_dir, Color.WHITE)
 
-	_burst_particles(square_center, particle_color, 16 if is_super_frenzy_hit else (10 if (is_frenzy_active or is_powerup) else 6))
+	_burst_particles(square_center, particle_color, 16 if is_super_frenzy_hit else (12 if (is_frenzy_active or is_powerup or is_blazing) else 7))
 	_burst_at(square_center, particle_color)
 	_bounce_label(score_label)
 
@@ -7285,6 +7989,28 @@ func _on_correct_swipe(swiped_dir: String = "", is_powerup: bool = false, poweru
 		frenzy_switch_timer = 0.0
 
 	update_score_display()
+
+	# Check if Overdrive Fever Meter hit 100% -> Unleash Overdrive Frenzy!
+	if fever_meter >= 100.0 and not is_frenzy_active:
+		fever_meter = 0.0
+		_activate_frenzy_mode(true)
+		start_new_turn()
+		return
+
+	# If this was Step 1 of a Double-Dash 2x Rush turn, immediately chain into Step 2!
+	if is_double_turn and double_turn_step == 1 and not is_frenzy_active and not is_powerup:
+		double_turn_step = 2
+		current_time_limit = maxf(0.75, _calculate_turn_time_limit(false))
+		time_left_in_turn = current_time_limit
+		_turn_start_time = Time.get_ticks_msec() / 1000.0
+		set_random_center_color()
+		if _double_indicator_label != null and is_instance_valid(_double_indicator_label):
+			_double_indicator_label.text = "🔥 2x RUSH! SWIPE SECOND TARGET! (2/2) 🔥"
+			_double_indicator_label.add_theme_color_override("font_color", Color(1.8, 0.4, 0.95))
+		_apply_board_colors()
+		_pulse_center()
+		return
+
 	start_new_turn()
 
 
@@ -7302,13 +8028,24 @@ func _on_wrong_swipe(_wrong_dir: String) -> void:
 		return
 
 	_cleanup_hold_ui()
+	_cleanup_double_turn_ui()
 	is_holding_active = false
 	is_hold_turn = false
+	is_double_turn = false
+	double_turn_step = 0
 	_center_scale_locked = false
+
+	# If Aegis Shield is active, absorb the mistake and protect streak & hearts!
+	if has_shield:
+		_consume_shield_on_mistake(_get_board_center(_wrong_dir))
+		start_new_turn()
+		return
 
 	lives -= 1
 	_lost_heart_this_game = true
 	streak = 0
+	perfect_streak = 0
+	fever_meter = maxf(0.0, fever_meter - 25.0)
 	_clutch_swipes_this_game = 0
 	_frenzies_at_max_multiplier = 0
 	_update_combo_hud()
@@ -7334,13 +8071,24 @@ func _on_wrong_swipe(_wrong_dir: String) -> void:
 func _on_turn_timeout() -> void:
 	total_swipes += 1
 	_cleanup_hold_ui()
+	_cleanup_double_turn_ui()
 	is_holding_active = false
 	is_hold_turn = false
+	is_double_turn = false
+	double_turn_step = 0
 	_center_scale_locked = false
+
+	# If Aegis Shield is active, absorb the timeout and protect streak & hearts!
+	if has_shield:
+		_consume_shield_on_mistake(_get_board_center(""))
+		start_new_turn()
+		return
 
 	lives -= 1
 	_lost_heart_this_game = true
 	streak = 0
+	perfect_streak = 0
+	fever_meter = maxf(0.0, fever_meter - 25.0)
 	_clutch_swipes_this_game = 0
 	_frenzies_at_max_multiplier = 0
 	_update_combo_hud()
@@ -7411,6 +8159,8 @@ func _update_high_score_display() -> void:
 	var text_val := "BEST: " + _format_number_with_commas(settings.high_score)
 	if high_score_label != null and is_instance_valid(high_score_label):
 		high_score_label.text = text_val
+		if not _beaten_high_score_this_run:
+			high_score_label.remove_theme_color_override("font_color")
 		if text_val.length() > 15:
 			high_score_label.add_theme_font_size_override("font_size", 11)
 		elif text_val.length() > 12:
@@ -7431,6 +8181,7 @@ func _update_high_score_display() -> void:
 
 func _add_frenzy_charge() -> void:
 	frenzy_charges += 1
+	_add_fever_charge(6.0)
 	_update_frenzy_charge_ui(true)
 	sfx.play("unlock")
 	_haptic_frenzy()
@@ -7469,6 +8220,80 @@ func _update_frenzy_charge_ui(animate: bool = false) -> void:
 			tw.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 			tw.tween_property(_frenzy_charge_label, "scale", Vector2(1.3, 1.3), 0.12)
 			tw.tween_property(_frenzy_charge_label, "scale", Vector2.ONE, 0.15)
+
+
+func _add_fever_charge(amount: float) -> void:
+	if is_frenzy_active or amount <= 0.0:
+		return
+	fever_meter = clampf(fever_meter + amount, 0.0, 100.0)
+	_update_combo_hud()
+
+
+func _activate_shield(silent_banner: bool = false) -> void:
+	has_shield = true
+	_add_fever_charge(4.0)
+	_update_shield_ui(true)
+	_apply_board_colors()
+	if not silent_banner:
+		_show_remap_banner("🛡️ AEGIS SHIELD ACTIVE!")
+
+
+func _consume_shield_on_mistake(impact_pos: Vector2) -> void:
+	has_shield = false
+	_update_shield_ui(false)
+	sfx.play("shield_break")
+	sfx.play_voice("clutch_save", 72, 1.2)
+	_haptic_celebration()
+	_shake_screen(5.0)
+	_burst_particles(impact_pos, Color(0.2, 1.0, 0.75), 18)
+	_burst_particles(_get_board_center(""), Color(0.2, 0.95, 1.0), 16)
+	_show_remap_banner("🛡️ SHIELD SAVED STREAK!")
+	_apply_board_colors()
+
+
+func _update_shield_ui(animate: bool = false) -> void:
+	if _shield_hud_label == null or not is_instance_valid(_shield_hud_label):
+		var hud := $GameScreen/GameHUD
+		if hud == null:
+			return
+		_shield_hud_label = Label.new()
+		_shield_hud_label.name = "ShieldHUDLabel"
+		_shield_hud_label.anchor_left = 1.0
+		_shield_hud_label.anchor_right = 1.0
+		_shield_hud_label.offset_left = -165.0
+		_shield_hud_label.offset_right = -15.0
+		_shield_hud_label.offset_top = 88.0
+		_shield_hud_label.offset_bottom = 110.0
+		_shield_hud_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		_shield_hud_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		_shield_hud_label.add_theme_font_size_override("font_size", 12)
+		_shield_hud_label.add_theme_color_override("font_color", Color(0.2, 1.0, 0.75))
+		_shield_hud_label.add_theme_color_override("font_outline_color", Color(0.04, 0.12, 0.10, 1.0))
+		_shield_hud_label.add_theme_constant_override("outline_size", 4)
+		hud.add_child(_shield_hud_label)
+
+	if not has_shield:
+		_shield_hud_label.visible = false
+		_shield_hud_label.text = ""
+	else:
+		_shield_hud_label.visible = true
+		_shield_hud_label.text = "🛡️ SHIELD READY"
+		if animate:
+			_shield_hud_label.pivot_offset = Vector2(150, 11)
+			var tw := create_tween()
+			tw.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+			tw.tween_property(_shield_hud_label, "scale", Vector2(1.3, 1.3), 0.12)
+			tw.tween_property(_shield_hud_label, "scale", Vector2.ONE, 0.15)
+
+
+func _collect_spark_jackpot() -> void:
+	_add_fever_charge(5.0)
+	sfx.play_voice("jackpot", 75, 1.2)
+	if not _tamper_flagged and settings != null:
+		settings.add_sparks(5)
+		sparks_collected_in_run += 5
+		_update_sparks_displays()
+	_show_remap_banner("💎 JACKPOT! +5 NEON SPARKS!")
 
 
 # =====================================================
@@ -7530,6 +8355,40 @@ func _on_tamper_detected(reason: String) -> void:
 
 func update_score_display() -> void:
 	_set_scaled_score_text(score_label, score, 42)
+	_check_live_score_milestones()
+
+
+func _check_live_score_milestones() -> void:
+	if _is_walkthrough_active or _tamper_flagged or settings == null or state != settings.GameState.PLAYING:
+		return
+
+	# 1. Live mid-run High Score beat announcement!
+	if _high_score_at_run_start > 0 and score > _high_score_at_run_start:
+		if not _beaten_high_score_this_run:
+			_beaten_high_score_this_run = true
+			sfx.play("unlock")
+			sfx.play_voice("new_high_score", 100, 1.5)
+			_haptic_celebration()
+			_show_remap_banner("🏆 NEW HIGH SCORE! 🏆")
+			_burst_particles(_get_board_center(""), Color(1.0, 0.88, 0.2), 20)
+		if high_score_label != null and is_instance_valid(high_score_label):
+			var live_best_text := "NEW BEST: " + _format_number_with_commas(score)
+			high_score_label.text = live_best_text
+			high_score_label.add_theme_color_override("font_color", Color(1.0, 0.90, 0.25))
+
+	# 2. Live Song unlock milestone announcement!
+	for song: Dictionary in settings.SONGS:
+		var u_score: int = int(song.get("unlock_score", 0))
+		var s_id: String = str(song.get("id", ""))
+		if u_score > 0 and u_score > _high_score_at_run_start and score >= u_score and not _unlocked_songs_this_run.has(s_id):
+			_unlocked_songs_this_run[s_id] = true
+			_queue_achievement_toast({
+				"header": "NEW SONG UNLOCKED!",
+				"name": str(song.get("name", "NEW TRACK")),
+				"desc": "Reached " + _format_number_with_commas(u_score) + " points!",
+				"icon": "star",
+				"color": Color(0.25, 0.95, 1.0),
+			})
 
 
 func _update_lives_display() -> void:
@@ -7598,18 +8457,14 @@ func _on_heart_draw(index: int) -> void:
 	var center := panel_size / 2.0
 	var is_active := index < lives
 
-	# Parametric heart polygon points
-	var num_pts := 32
+	# Parametric heart polygon points (scaled from precomputed _unit_heart_pts)
+	var num_pts := _unit_heart_pts.size()
 	var heart_pts := PackedVector2Array()
 	heart_pts.resize(num_pts)
 	var radius := minf(panel_size.x, panel_size.y) * 0.42
 
 	for k in range(num_pts):
-		var t := (k / float(num_pts)) * TAU
-		var x := 16.0 * pow(sin(t), 3)
-		var y := -(13.0 * cos(t) - 5.0 * cos(2.0 * t) - 2.0 * cos(3.0 * t) - cos(4.0 * t))
-		var pt := center + Vector2(x * (radius / 16.0), (y - 5.5) * (radius / 16.0))
-		heart_pts[k] = pt
+		heart_pts[k] = center + _unit_heart_pts[k] * radius
 
 	var closed_pts := heart_pts.duplicate()
 	closed_pts.append(heart_pts[0])
@@ -7712,17 +8567,15 @@ func _shake_screen(strength: float = settings.SCREEN_SHAKE_STRENGTH) -> void:
 func _flash_square(direction: String, flash_color: Color) -> void:
 	if not direction_squares.has(direction):
 		return
-	var panel: Panel = direction_squares[direction]
 	var tween := create_tween()
 	tween.set_trans(Tween.TRANS_QUAD)
 	tween.set_ease(Tween.EASE_OUT)
-	var flash_style := _panel_style.duplicate()
-	flash_style.bg_color = flash_color
-	var captured_panel := panel
+	var style: StyleBoxFlat = _dir_square_styles.get(direction)
+	if style != null:
+		style.bg_color = flash_color
 	# Apply flash immediately, then restore via full board refresh so it
 	# always matches the CURRENT (not stale) game state — fixes post-Frenzy
 	# squares keeping the gold color.
-	captured_panel.add_theme_stylebox_override("panel", flash_style)
 	tween.tween_callback(_apply_board_colors).set_delay(0.08)
 
 
@@ -7734,21 +8587,18 @@ func _flash_center_red() -> void:
 	_center_flash_tween = tween
 	tween.set_trans(Tween.TRANS_QUAD)
 	tween.set_ease(Tween.EASE_OUT)
-	var red_style := _center_panel_style.duplicate()
-	red_style.bg_color = Color(0.8, 0.1, 0.1)
-	var captured_center := center_square
+	if _center_live_style != null:
+		_center_live_style.bg_color = Color(0.8, 0.1, 0.1)
 	# Apply red flash immediately, then restore via full board refresh so the
 	# center square always reflects the CURRENT game state (not stale Frenzy Gold).
-	captured_center.add_theme_stylebox_override("panel", red_style)
 	tween.tween_callback(_apply_board_colors).set_delay(0.15)
 	# Clear the tracked reference once the tween has fully finished
 	tween.tween_callback(func(): _center_flash_tween = null)
 
 
 func _fade_center_gray() -> void:
-	var gray_style := _center_panel_style.duplicate()
-	gray_style.bg_color = Color(0.4, 0.35, 0.45)
-	center_square.add_theme_stylebox_override("panel", gray_style)
+	if _center_live_style != null:
+		_center_live_style.bg_color = Color(0.4, 0.35, 0.45)
 
 	var tween := create_tween()
 	tween.set_trans(Tween.TRANS_QUAD)
@@ -8052,7 +8902,7 @@ func _setup_combo_hud() -> void:
 	_combo_bar.max_value = 1.0
 	_combo_bar.value = 0.0
 	_combo_bar.show_percentage = false
-	_combo_bar.custom_minimum_size = Vector2(150, 14)
+	_combo_bar.custom_minimum_size = Vector2(115, 14)
 	_combo_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_combo_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
@@ -8063,12 +8913,49 @@ func _setup_combo_hud() -> void:
 	bg_style.set_border_color(Color(1, 1, 1, 0.25))
 	_combo_bar.add_theme_stylebox_override("background", bg_style)
 
-	var fill_style := StyleBoxFlat.new()
-	fill_style.set_corner_radius_all(7)
-	fill_style.bg_color = Color(0.6, 0.9, 1.0)
-	_combo_bar.add_theme_stylebox_override("fill", fill_style)
+	_combo_bar_fill_style = StyleBoxFlat.new()
+	_combo_bar_fill_style.set_corner_radius_all(7)
+	_combo_bar_fill_style.bg_color = Color(0.6, 0.9, 1.0)
+	_combo_bar.add_theme_stylebox_override("fill", _combo_bar_fill_style)
 
 	_combo_container.add_child(_combo_bar)
+
+	# --- Overdrive / Fever Meter (auto-triggers Frenzy at 100%) ---
+	var sep := Control.new()
+	sep.custom_minimum_size = Vector2(6, 1)
+	sep.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_combo_container.add_child(sep)
+
+	_fever_label = Label.new()
+	_fever_label.name = "FeverLabel"
+	_fever_label.text = "⚡0%"
+	_fever_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_fever_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	if arcade_font != null:
+		_fever_label.add_theme_font_override("font", arcade_font)
+	_fever_label.add_theme_font_size_override("font_size", 14)
+	_fever_label.add_theme_color_override("font_color", Color(1.0, 0.88, 0.25))
+	_fever_label.add_theme_color_override("font_outline_color", Color(0.08, 0.04, 0.16, 1.0))
+	_fever_label.add_theme_constant_override("outline_size", 5)
+	_combo_container.add_child(_fever_label)
+
+	_fever_bar = ProgressBar.new()
+	_fever_bar.name = "FeverBar"
+	_fever_bar.min_value = 0.0
+	_fever_bar.max_value = 100.0
+	_fever_bar.value = 0.0
+	_fever_bar.show_percentage = false
+	_fever_bar.custom_minimum_size = Vector2(105, 14)
+	_fever_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_fever_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_fever_bar.add_theme_stylebox_override("background", bg_style.duplicate())
+
+	_fever_bar_fill_style = StyleBoxFlat.new()
+	_fever_bar_fill_style.set_corner_radius_all(7)
+	_fever_bar_fill_style.bg_color = Color(1.3, 0.85, 0.15)
+	_fever_bar.add_theme_stylebox_override("fill", _fever_bar_fill_style)
+	_combo_container.add_child(_fever_bar)
+
 	_update_combo_hud()
 
 
@@ -8103,10 +8990,25 @@ func _update_combo_hud() -> void:
 			tier_color = Color(1.6, 0.9, 0.1)
 
 	_combo_label.add_theme_color_override("font_color", tier_color)
-	var fill_style := StyleBoxFlat.new()
-	fill_style.set_corner_radius_all(7)
-	fill_style.bg_color = tier_color
-	_combo_bar.add_theme_stylebox_override("fill", fill_style)
+	if _combo_bar_fill_style != null:
+		_combo_bar_fill_style.bg_color = tier_color
+
+	if _fever_bar != null and is_instance_valid(_fever_bar) and _fever_label != null and is_instance_valid(_fever_label):
+		var f_val := 100.0 if is_frenzy_active else clampf(fever_meter, 0.0, 100.0)
+		_fever_bar.value = f_val
+		var f_col: Color
+		if is_frenzy_active:
+			_fever_label.text = "⚡MAX!"
+			f_col = FRENZY_SPECIAL_COLOR
+		elif f_val >= 75.0:
+			_fever_label.text = "🔥" + str(int(round(f_val))) + "%"
+			f_col = Color(1.6, 0.35, 0.85)
+		else:
+			_fever_label.text = "⚡" + str(int(round(f_val))) + "%"
+			f_col = Color(1.3, 0.9, 0.2)
+		_fever_label.add_theme_color_override("font_color", f_col)
+		if _fever_bar_fill_style != null:
+			_fever_bar_fill_style.bg_color = f_col
 
 
 func _combo_level_up_flash() -> void:

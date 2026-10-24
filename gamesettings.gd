@@ -281,6 +281,7 @@ var unlocked_skins: Array = ["classic"]
 var unlocked_sfx_packs: Array = ["classic"]
 var music_volume: float = 0.8
 var haptics_enabled: bool = true
+var announcer_enabled: bool = true
 var board_vertical_offset: float = 0.0
 var unlocked_achievements: Array = []
 
@@ -567,6 +568,7 @@ func save_data() -> void:
 		"unlocked_sfx_packs": unlocked_sfx_packs,
 		"music_volume": music_volume,
 		"haptics_enabled": haptics_enabled,
+		"announcer_enabled": announcer_enabled,
 		"board_vertical_offset": board_vertical_offset,
 		"unlocked_achievements": unlocked_achievements,
 		"daily_date": daily_date,
@@ -672,6 +674,7 @@ func load_data() -> void:
 
 		music_volume = float(data.get("music_volume", 0.8))
 		haptics_enabled = bool(data.get("haptics_enabled", true))
+		announcer_enabled = bool(data.get("announcer_enabled", true))
 		board_vertical_offset = clampf(float(data.get("board_vertical_offset", 0.0)), -100.0, 120.0)
 		var raw_achievements: Array = data.get("unlocked_achievements", [])
 		unlocked_achievements = []
@@ -728,6 +731,7 @@ func reset_game_data() -> void:
 	unlocked_skins = ["classic"]
 	unlocked_sfx_packs = ["classic"]
 	haptics_enabled = true
+	announcer_enabled = true
 	board_vertical_offset = 0.0
 	unlocked_achievements = []
 	daily_date = ""

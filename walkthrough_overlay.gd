@@ -138,18 +138,18 @@ func _build_ui() -> void:
 		_desc_label.add_theme_font_override("font", arcade_font)
 	_vbox_container.add_child(_desc_label)
 
-	# 6. Step Progress Indicator Dots (Steps 1-6)
+	# 6. Step Progress Indicator Dots (Steps 1-9)
 	_dots_container = HBoxContainer.new()
 	_dots_container.name = "DotsContainer"
 	_dots_container.alignment = BoxContainer.ALIGNMENT_CENTER
 	_dots_container.custom_minimum_size = Vector2(0, 12)
-	_dots_container.add_theme_constant_override("separation", 8)
+	_dots_container.add_theme_constant_override("separation", 6)
 	_vbox_container.add_child(_dots_container)
 
 	_dot_panels.clear()
-	for i in range(6):
+	for i in range(9):
 		var dot := Panel.new()
-		dot.custom_minimum_size = Vector2(18, 6)
+		dot.custom_minimum_size = Vector2(14, 6)
 		var dot_style := StyleBoxFlat.new()
 		dot_style.set_corner_radius_all(3)
 		dot_style.bg_color = Color(0.18, 0.22, 0.35, 0.8)
@@ -157,7 +157,7 @@ func _build_ui() -> void:
 		_dots_container.add_child(dot)
 		_dot_panels.append(dot)
 
-	# 7. Final Step Glowing Action Button: "LET'S PLAY!" or "BACK TO OPTIONS" (Step 7 only)
+	# 7. Final Step Glowing Action Button: "LET'S PLAY!" or "BACK TO OPTIONS" (Step 10 only)
 	_play_btn = Button.new()
 	_play_btn.name = "WalkthroughPlayBtn"
 	_play_btn.text = "LET'S PLAY!"
@@ -294,7 +294,7 @@ func set_step(new_step: int, new_target: String, title: String, description: Str
 
 
 func show_final_step(title: String, description: String, button_text: String = "LET'S PLAY!") -> void:
-	step_index = 7
+	step_index = 10
 	target_dir = ""
 	is_hold = false
 	is_frenzy_practice = false
@@ -337,18 +337,18 @@ func _update_dots(active_step: int) -> void:
 		var style: StyleBoxFlat = dot.get_theme_stylebox("panel").duplicate() as StyleBoxFlat
 		if i + 1 == active_step:
 			# Active step: glowing cyan pill
-			dot.custom_minimum_size = Vector2(28, 6)
+			dot.custom_minimum_size = Vector2(24, 6)
 			style.bg_color = Color(step_color.r, step_color.g, step_color.b, 1.0)
 			style.set_shadow_color(Color(step_color.r, step_color.g, step_color.b, 0.6))
 			style.set_shadow_size(6)
 		elif i + 1 < active_step:
 			# Completed step: solid calm blue
-			dot.custom_minimum_size = Vector2(18, 6)
+			dot.custom_minimum_size = Vector2(14, 6)
 			style.bg_color = Color(0.3, 0.6, 0.9, 0.9)
 			style.set_shadow_size(0)
 		else:
 			# Future step: dim slate
-			dot.custom_minimum_size = Vector2(18, 6)
+			dot.custom_minimum_size = Vector2(14, 6)
 			style.bg_color = Color(0.16, 0.18, 0.28, 0.6)
 			style.set_shadow_size(0)
 		dot.add_theme_stylebox_override("panel", style)
@@ -426,21 +426,21 @@ func _draw() -> void:
 		for dir: String in ["up", "down", "left", "right"]:
 			var p: Panel = direction_squares.get(dir)
 			if p != null and is_instance_valid(p):
-				var t_local: Vector2 = inv_xform * (p.global_position + p.size / 2.0)
-				var d_vec: Vector2 = (t_local - c_local).normalized()
+				var f_t_local: Vector2 = inv_xform * (p.global_position + p.size / 2.0)
+				var d_vec: Vector2 = (f_t_local - c_local).normalized()
 				var p1: Vector2 = c_local + d_vec * 55.0
-				var p2: Vector2 = t_local - d_vec * 50.0
+				var p2: Vector2 = f_t_local - d_vec * 50.0
 
 				draw_line(p1, p2, gold_col, 8.0 * pulse_f)
 				draw_line(p1, p2, Color.WHITE, 3.0 * pulse_f)
 
 				var a_size: float = 16.0 * pulse_f
-				var perp: Vector2 = Vector2(-d_vec.y, d_vec.x)
-				var tip: Vector2 = p2
-				var b1: Vector2 = p2 - d_vec * a_size + perp * (a_size * 0.6)
-				var b2: Vector2 = p2 - d_vec * a_size - perp * (a_size * 0.6)
-				draw_colored_polygon(PackedVector2Array([tip, b1, b2]), Color.WHITE)
-				draw_polyline(PackedVector2Array([b1, tip, b2]), Color(1.0, 0.85, 0.15), 2.5)
+				var f_perp: Vector2 = Vector2(-d_vec.y, d_vec.x)
+				var f_tip: Vector2 = p2
+				var f_b1: Vector2 = p2 - d_vec * a_size + f_perp * (a_size * 0.6)
+				var f_b2: Vector2 = p2 - d_vec * a_size - f_perp * (a_size * 0.6)
+				draw_colored_polygon(PackedVector2Array([f_tip, f_b1, f_b2]), Color.WHITE)
+				draw_polyline(PackedVector2Array([f_b1, f_tip, f_b2]), Color(1.0, 0.85, 0.15), 2.5)
 		return
 
 	# Normal targeted arrow

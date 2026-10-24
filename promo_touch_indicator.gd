@@ -72,7 +72,7 @@ func end_hold() -> void:
 	_tween.tween_property(self, "touch_alpha", 0.0, 0.15)
 	_tween.tween_callback(func(): is_active = false)
 
-func _spawn_ripple(pos: Vector2, max_rad: float) -> void:
+func _spawn_ripple(_pos: Vector2, max_rad: float) -> void:
 	if _ripple_tween != null and _ripple_tween.is_valid():
 		_ripple_tween.kill()
 	ripple_radius = 18.0
