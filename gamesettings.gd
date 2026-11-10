@@ -296,10 +296,25 @@ var daily_bonus_ad_unlocked: bool = false
 var daily_mission_progress: Dictionary = {}
 var daily_mission_completed: Array = []
 
+# --- Story Mode Campaign State ---
+var story_levels_cleared: Array = []
+
 
 func _ready() -> void:
 	load_data()
 	check_and_refresh_daily_missions()
+
+
+func is_story_level_cleared(level_num: int) -> bool:
+	return level_num in story_levels_cleared
+
+
+func complete_story_level(level_num: int) -> bool:
+	var first_clear: bool = not (level_num in story_levels_cleared)
+	if first_clear:
+		story_levels_cleared.append(level_num)
+	save_data()
+	return first_clear
 
 
 func is_song_unlocked(song: Dictionary) -> bool:
@@ -578,6 +593,7 @@ func save_data() -> void:
 		"daily_mission_completed": daily_mission_completed,
 		"dismissed_update_version": dismissed_update_version,
 		"dismissed_update_code": dismissed_update_code,
+		"story_levels_cleared": story_levels_cleared,
 	}
 	data["_checksum"] = _compute_checksum(data)
 	var file := FileAccess.open_encrypted_with_pass(SAVE_FILE, FileAccess.WRITE, _SAVE_KEY)
@@ -696,6 +712,11 @@ func load_data() -> void:
 			daily_mission_completed.append(str(c_id))
 		dismissed_update_version = str(data.get("dismissed_update_version", ""))
 		dismissed_update_code = int(data.get("dismissed_update_code", 0))
+		story_levels_cleared = []
+		for lvl in data.get("story_levels_cleared", []):
+			var lvl_int := int(lvl)
+			if not story_levels_cleared.has(lvl_int):
+				story_levels_cleared.append(lvl_int)
 
 		# Automatically migrate old unencrypted saves to encrypted format
 		if not is_encrypted:
@@ -741,5 +762,6 @@ func reset_game_data() -> void:
 	daily_mission_completed = []
 	dismissed_update_version = ""
 	dismissed_update_code = 0
+	story_levels_cleared = []
 	check_and_refresh_daily_missions()
 	save_data()
