@@ -173,31 +173,36 @@ const ACHIEVEMENTS := [
 	{"id": "completionist",   "name": "COMPLETIONIST",   "desc": "Unlock every badge, song, and theme", "icon": "diamond", "color": Color(1.0, 1.0, 1.0), "hidden": true},
 ]
 
-# --- Cosmetic Shop: Swipe Trails (Doubled Sparks Costs) ---
+# --- Cosmetic Shop: Swipe Trails (Doubled Sparks Costs + Boss Rewards) ---
 const SWIPE_TRAILS := [
-	{"id": "neon",     "name": "NEON LASER",      "desc": "Classic glowing theme laser with bright white core", "cost": 0,    "color": Color(0.20, 0.95, 1.00)},
-	{"id": "rainbow",  "name": "PRISMATIC WAVE",  "desc": "Full-spectrum shifting HSV rainbow ribbon",          "cost": 300,  "color": Color(1.00, 0.45, 0.85)},
-	{"id": "electric", "name": "THUNDER VOLT",    "desc": "High-voltage crackling lightning arcs along swipes", "cost": 600,  "color": Color(1.00, 0.90, 0.20)},
-	{"id": "plasma",   "name": "SOLAR FLARE",     "desc": "Blazing crimson-amber fire beam with ember orbs",    "cost": 1000, "color": Color(1.00, 0.38, 0.12)},
-	{"id": "stardust", "name": "GALAXY STARDUST", "desc": "Cosmic nebula shimmer with 4-point diamond stars",   "cost": 1600, "color": Color(0.75, 0.35, 1.00)},
+	{"id": "neon",         "name": "NEON LASER",      "desc": "Classic glowing theme laser with bright white core",   "cost": 0,    "color": Color(0.20, 0.95, 1.00)},
+	{"id": "rainbow",      "name": "PRISMATIC WAVE",  "desc": "Full-spectrum shifting HSV rainbow ribbon",            "cost": 300,  "color": Color(1.00, 0.45, 0.85)},
+	{"id": "electric",     "name": "THUNDER VOLT",    "desc": "High-voltage crackling lightning arcs along swipes",   "cost": 600,  "color": Color(1.00, 0.90, 0.20)},
+	{"id": "plasma",       "name": "SOLAR FLARE",     "desc": "Blazing crimson-amber fire beam with ember orbs",      "cost": 1000, "color": Color(1.00, 0.38, 0.12)},
+	{"id": "stardust",     "name": "GALAXY STARDUST", "desc": "Cosmic nebula shimmer with 4-point diamond stars",     "cost": 1600, "color": Color(0.75, 0.35, 1.00)},
+	{"id": "venom",        "name": "VENOM MATRIX",    "desc": "Cyber Hydra reward: toxic emerald-cyan helix beam",    "cost": 0,    "boss_unlock": 2, "color": Color(0.20, 1.00, 0.68)},
+	{"id": "void_vortex",  "name": "VOID VORTEX",     "desc": "Void Seraph reward: violet-gold singularity ribbon",   "cost": 0,    "boss_unlock": 3, "color": Color(0.92, 0.42, 1.00)},
+	{"id": "melody_notes", "name": "PHANTOM NOTES",   "desc": "Phantom Maestro reward: crimson-gold music notes",     "cost": 0,    "boss_unlock": 4, "color": Color(1.00, 0.72, 0.30)},
 ]
 
-# --- Cosmetic Shop: Square Skins (Doubled Sparks Costs) ---
+# --- Cosmetic Shop: Square Skins (Doubled Sparks Costs + Boss Rewards) ---
 const SQUARE_SKINS := [
-	{"id": "classic",   "name": "NEON SOLID",   "desc": "Classic vibrant synthwave filled arcade squares",      "cost": 0,    "color": Color(0.90, 0.28, 0.52)},
-	{"id": "wireframe", "name": "CYBER GRID",   "desc": "Dark-glass core with dual neon borders & tech corners","cost": 400,  "color": Color(0.15, 0.95, 0.85)},
-	{"id": "scanline",  "name": "RETRO CRT",    "desc": "Vintage arcade monitor scanlines & glossy reflection", "cost": 700,  "color": Color(0.45, 0.80, 1.00)},
-	{"id": "equalizer", "name": "BASS REACTOR", "desc": "Live animated spectrum bars pulsing inside squares",   "cost": 1200, "color": Color(0.25, 1.00, 0.50)},
-	{"id": "diamond",   "name": "PRISM CORE",   "desc": "Geometric diamond lattice & glowing inner circuits",   "cost": 1800, "color": Color(1.00, 0.82, 0.20)},
+	{"id": "classic",     "name": "NEON SOLID",   "desc": "Classic vibrant synthwave filled arcade squares",       "cost": 0,    "color": Color(0.90, 0.28, 0.52)},
+	{"id": "wireframe",   "name": "CYBER GRID",   "desc": "Dark-glass core with dual neon borders & tech corners", "cost": 400,  "color": Color(0.15, 0.95, 0.85)},
+	{"id": "scanline",    "name": "RETRO CRT",    "desc": "Vintage arcade monitor scanlines & glossy reflection",  "cost": 700,  "color": Color(0.45, 0.80, 1.00)},
+	{"id": "equalizer",   "name": "BASS REACTOR", "desc": "Live animated spectrum bars pulsing inside squares",    "cost": 1200, "color": Color(0.25, 1.00, 0.50)},
+	{"id": "diamond",     "name": "PRISM CORE",   "desc": "Geometric diamond lattice & glowing inner circuits",    "cost": 1800, "color": Color(1.00, 0.82, 0.20)},
+	{"id": "titan_armor", "name": "TITAN ARMOR",  "desc": "Chroma Titan reward: hex-plate armor & warning trim",   "cost": 0,    "boss_unlock": 1, "color": Color(0.35, 0.92, 1.00)},
 ]
 
-# --- Cosmetic Shop: Hit Sound Packs (Doubled Sparks Costs) ---
+# --- Cosmetic Shop: Hit Sound Packs (Doubled Sparks Costs + Boss Rewards) ---
 const SOUND_PACKS := [
 	{"id": "classic",     "name": "CLASSIC SYNTH", "desc": "Snappy rising sine-wave arcade blip",                 "cost": 0,    "color": Color(0.60, 0.90, 1.00)},
 	{"id": "chiptune",    "name": "8-BIT ARCADE",  "desc": "Retro square-wave 3-note coin arpeggio",              "cost": 300,  "color": Color(0.30, 1.00, 0.45)},
 	{"id": "cyber_click", "name": "MECH SWITCH",   "desc": "Tactile mechanical switch click + sub-bass thump",    "cost": 600,  "color": Color(1.00, 0.70, 0.20)},
 	{"id": "dream_chord", "name": "SYNTH CHORD",   "desc": "Lush polyphonic synthwave major-7th stereo pluck",    "cost": 1000, "color": Color(0.95, 0.35, 0.85)},
 	{"id": "plasma_zap",  "name": "PLASMA LASER",  "desc": "Sci-fi resonant frequency sweep with FM shimmer",     "cost": 1500, "color": Color(0.20, 0.85, 1.00)},
+	{"id": "opera_chime", "name": "OPERA CHIME",   "desc": "Phantom Maestro reward: golden orchestral bell chord", "cost": 0,    "boss_unlock": 4, "color": Color(1.00, 0.78, 0.32)},
 ]
 
 # --- Pool of 9 Rotating Daily Quests (3 Active Daily + 1 Bonus Ad Mission per Day) ---
@@ -298,6 +303,10 @@ var daily_mission_completed: Array = []
 
 # --- Story Mode Campaign State ---
 var story_levels_cleared: Array = []
+var story_level_stars: Dictionary = {}       # "1".."4" -> int (1..3)
+var story_level_best_time: Dictionary = {}   # "1".."4" -> float (seconds)
+var story_boss_rush_cleared: bool = false
+var story_boss_rush_best_time: float = 0.0
 
 
 func _ready() -> void:
@@ -309,12 +318,95 @@ func is_story_level_cleared(level_num: int) -> bool:
 	return level_num in story_levels_cleared
 
 
+func get_story_level_stars(level_num: int) -> int:
+	var s: int = int(story_level_stars.get(str(level_num), 0))
+	if s <= 0 and is_story_level_cleared(level_num):
+		return 1
+	return clampi(s, 0, 3)
+
+
+func get_story_level_best_time(level_num: int) -> float:
+	return float(story_level_best_time.get(str(level_num), 0.0))
+
+
+func get_story_total_stars() -> int:
+	var total: int = 0
+	for lvl in range(1, 5):
+		total += get_story_level_stars(lvl)
+	return total
+
+
+func _unlock_boss_cosmetics_for_level(level_num: int) -> Array[String]:
+	var newly_unlocked: Array[String] = []
+	for item: Dictionary in SWIPE_TRAILS:
+		if int(item.get("boss_unlock", 0)) == level_num:
+			var id_s: String = str(item.get("id", ""))
+			if not (id_s in unlocked_trails):
+				unlocked_trails.append(id_s)
+				newly_unlocked.append(str(item.get("name", id_s)) + " TRAIL")
+	for item: Dictionary in SQUARE_SKINS:
+		if int(item.get("boss_unlock", 0)) == level_num:
+			var id_s: String = str(item.get("id", ""))
+			if not (id_s in unlocked_skins):
+				unlocked_skins.append(id_s)
+				newly_unlocked.append(str(item.get("name", id_s)) + " SKIN")
+	for item: Dictionary in SOUND_PACKS:
+		if int(item.get("boss_unlock", 0)) == level_num:
+			var id_s: String = str(item.get("id", ""))
+			if not (id_s in unlocked_sfx_packs):
+				unlocked_sfx_packs.append(id_s)
+				newly_unlocked.append(str(item.get("name", id_s)) + " SFX")
+	return newly_unlocked
+
+
 func complete_story_level(level_num: int) -> bool:
 	var first_clear: bool = not (level_num in story_levels_cleared)
 	if first_clear:
 		story_levels_cleared.append(level_num)
+	_unlock_boss_cosmetics_for_level(level_num)
 	save_data()
 	return first_clear
+
+
+func record_story_level_result(level_num: int, elapsed_sec: float, stars: int) -> Dictionary:
+	var first_clear: bool = not (level_num in story_levels_cleared)
+	if first_clear:
+		story_levels_cleared.append(level_num)
+	var key: String = str(level_num)
+	var prev_stars: int = get_story_level_stars(level_num) if not first_clear else 0
+	var clamped_stars: int = clampi(stars, 1, 3)
+	if clamped_stars > prev_stars:
+		story_level_stars[key] = clamped_stars
+	elif not story_level_stars.has(key):
+		story_level_stars[key] = clamped_stars
+
+	var prev_best: float = get_story_level_best_time(level_num)
+	var new_best_time: bool = elapsed_sec > 0.0 and (prev_best <= 0.0 or elapsed_sec < prev_best)
+	if new_best_time:
+		story_level_best_time[key] = snappedf(elapsed_sec, 0.01)
+
+	var unlocked_cosmetics: Array[String] = _unlock_boss_cosmetics_for_level(level_num)
+	save_data()
+	return {
+		"first_clear": first_clear,
+		"stars": clamped_stars,
+		"new_stars": maxi(0, clamped_stars - prev_stars),
+		"new_best_time": new_best_time,
+		"unlocked_cosmetics": unlocked_cosmetics,
+	}
+
+
+func record_boss_rush_clear(elapsed_sec: float) -> Dictionary:
+	var first_clear: bool = not story_boss_rush_cleared
+	story_boss_rush_cleared = true
+	var new_best_time: bool = elapsed_sec > 0.0 and (story_boss_rush_best_time <= 0.0 or elapsed_sec < story_boss_rush_best_time)
+	if new_best_time:
+		story_boss_rush_best_time = snappedf(elapsed_sec, 0.01)
+	save_data()
+	return {
+		"first_clear": first_clear,
+		"new_best_time": new_best_time,
+	}
 
 
 func is_song_unlocked(song: Dictionary) -> bool:
@@ -328,19 +420,40 @@ func is_theme_unlocked(_theme: Dictionary) -> bool:
 func is_trail_unlocked(trail_id: String) -> bool:
 	if trail_id == "neon":
 		return true
-	return trail_id in unlocked_trails
+	if trail_id in unlocked_trails:
+		return true
+	for item: Dictionary in SWIPE_TRAILS:
+		if str(item.get("id", "")) == trail_id:
+			var b_lvl: int = int(item.get("boss_unlock", 0))
+			if b_lvl > 0 and is_story_level_cleared(b_lvl):
+				return true
+	return false
 
 
 func is_skin_unlocked(skin_id: String) -> bool:
 	if skin_id == "classic":
 		return true
-	return skin_id in unlocked_skins
+	if skin_id in unlocked_skins:
+		return true
+	for item: Dictionary in SQUARE_SKINS:
+		if str(item.get("id", "")) == skin_id:
+			var b_lvl: int = int(item.get("boss_unlock", 0))
+			if b_lvl > 0 and is_story_level_cleared(b_lvl):
+				return true
+	return false
 
 
 func is_sfx_pack_unlocked(pack_id: String) -> bool:
 	if pack_id == "classic":
 		return true
-	return pack_id in unlocked_sfx_packs
+	if pack_id in unlocked_sfx_packs:
+		return true
+	for item: Dictionary in SOUND_PACKS:
+		if str(item.get("id", "")) == pack_id:
+			var b_lvl: int = int(item.get("boss_unlock", 0))
+			if b_lvl > 0 and is_story_level_cleared(b_lvl):
+				return true
+	return false
 
 
 func add_sparks(amount: int) -> void:
@@ -594,6 +707,10 @@ func save_data() -> void:
 		"dismissed_update_version": dismissed_update_version,
 		"dismissed_update_code": dismissed_update_code,
 		"story_levels_cleared": story_levels_cleared,
+		"story_level_stars": story_level_stars,
+		"story_level_best_time": story_level_best_time,
+		"story_boss_rush_cleared": story_boss_rush_cleared,
+		"story_boss_rush_best_time": story_boss_rush_best_time,
 	}
 	data["_checksum"] = _compute_checksum(data)
 	var file := FileAccess.open_encrypted_with_pass(SAVE_FILE, FileAccess.WRITE, _SAVE_KEY)
@@ -717,6 +834,21 @@ func load_data() -> void:
 			var lvl_int := int(lvl)
 			if not story_levels_cleared.has(lvl_int):
 				story_levels_cleared.append(lvl_int)
+		story_level_stars = {}
+		var raw_stars = data.get("story_level_stars", {})
+		if raw_stars is Dictionary:
+			for k in raw_stars:
+				story_level_stars[str(k)] = clampi(int(raw_stars[k]), 0, 3)
+		story_level_best_time = {}
+		var raw_times = data.get("story_level_best_time", {})
+		if raw_times is Dictionary:
+			for k in raw_times:
+				story_level_best_time[str(k)] = maxf(0.0, float(raw_times[k]))
+		story_boss_rush_cleared = bool(data.get("story_boss_rush_cleared", false))
+		story_boss_rush_best_time = maxf(0.0, float(data.get("story_boss_rush_best_time", 0.0)))
+		# Retroactively unlock boss cosmetics for already-cleared story levels
+		for cleared_lvl in story_levels_cleared:
+			_unlock_boss_cosmetics_for_level(int(cleared_lvl))
 
 		# Automatically migrate old unencrypted saves to encrypted format
 		if not is_encrypted:
@@ -763,5 +895,9 @@ func reset_game_data() -> void:
 	dismissed_update_version = ""
 	dismissed_update_code = 0
 	story_levels_cleared = []
+	story_level_stars = {}
+	story_level_best_time = {}
+	story_boss_rush_cleared = false
+	story_boss_rush_best_time = 0.0
 	check_and_refresh_daily_missions()
 	save_data()

@@ -53,8 +53,8 @@ extends Control
 # --- Tutorial Nodes ---
 @onready var tutorial_understood_btn: Button = $TutorialScreen/TutorialPanel/TutorialUnderstoodBtn
 
-const CURRENT_VERSION_NAME: String = "1.2.0"
-const CURRENT_VERSION_CODE: int = 13
+const CURRENT_VERSION_NAME: String = "1.2.1"
+const CURRENT_VERSION_CODE: int = 14
 
 # --- Game State ---
 var state: GameSettings.GameState = GameSettings.GameState.MENU
@@ -310,21 +310,38 @@ var _pending_update_info: Dictionary = {}
 var _has_prompted_update: bool = false
 
 # --- Story Mode & Boss Fight State ---
+var _story_manager: StoryManager
 var _story_button: Button
 var _story_screen: Control
+var _story_scroll: ScrollContainer
+var _story_subtitle_label: Label
 var _story_level1_status_label: Label
+var _story_level1_stars_label: Label
 var _story_level1_preview_ctrl: Control
 var _story_level2_status_label: Label
+var _story_level2_stars_label: Label
 var _story_level2_preview_ctrl: Control
 var _story_level2_fight_btn: Button
 var _story_level3_status_label: Label
+var _story_level3_stars_label: Label
 var _story_level3_preview_ctrl: Control
 var _story_level3_fight_btn: Button
 var _story_last_swiped_dir: String = ""
 # --- Level 4 (Phantom Maestro): Melody Sequences, Mirror Curse & Masquerade ---
 var _story_level4_status_label: Label
+var _story_level4_stars_label: Label
 var _story_level4_preview_ctrl: Control
 var _story_level4_fight_btn: Button
+# --- Boss Rush Gauntlet UI & State ---
+var _story_boss_rush_preview_ctrl: Control
+var _story_boss_rush_stars_label: Label
+var _story_boss_rush_status_label: Label
+var _story_boss_rush_fight_btn: Button
+var is_boss_rush: bool = false
+var story_fight_elapsed: float = 0.0
+var story_boss_rush_elapsed: float = 0.0
+var story_last_stars_earned: int = 0
+var story_last_unlocked_cosmetics: Array[String] = []
 var _story_l4_sequence: Array[String] = []
 var _story_l4_seq_index: int = 0
 var _story_l4_mirror_swipes: int = 0
@@ -405,7 +422,11 @@ func _ready() -> void:
 	# ambient particles. Built in code so the .tscn stays untouched.
 	_setup_juice()
 
-	# Story Mode UI (STORY MODE button + Level Select overlay + Boss Arena HUD).
+	# Story Mode Manager & UI (STORY MODE button + Scrollable Level Select + Boss Rush + Boss Arena HUD).
+	_story_manager = StoryManager.new()
+	_story_manager.name = "StoryManager"
+	_story_manager.setup(self)
+	add_child(_story_manager)
 	_setup_story_ui()
 	_setup_story_boss_arena()
 
@@ -1002,6 +1023,27 @@ func _draw_square_skin_overlay(panel: Panel, sq_dir: String) -> void:
 		var c_nodes := [Vector2(14, 14), Vector2(s.x - 14, 14), Vector2(14, s.y - 14), Vector2(s.x - 14, s.y - 14)]
 		for cn: Vector2 in c_nodes:
 			panel.draw_circle(cn, 3.0, Color(1.0, 1.0, 1.0, 0.55))
+
+	elif skin_id == "titan_armor":
+		# TITAN ARMOR (Chroma Titan Boss Reward): Hex-plate armor bevel + corner rivets + hazard trim
+		var inset := 9.0
+		var hex_r := minf(s.x, s.y) * 0.36
+		var hex_pts := PackedVector2Array()
+		for i in range(6):
+			var a := float(i) * (TAU / 6.0) - PI / 6.0
+			hex_pts.append(c + Vector2(cos(a) * hex_r, sin(a) * hex_r))
+		var hex_closed := hex_pts.duplicate()
+		hex_closed.append(hex_pts[0])
+		panel.draw_colored_polygon(hex_pts, Color(0.05, 0.04, 0.12, 0.24))
+		panel.draw_polyline(hex_closed, Color(1.0, 1.0, 1.0, 0.55), 2.2, true)
+		panel.draw_rect(Rect2(inset, inset, s.x - inset * 2.0, s.y - inset * 2.0), Color(1.0, 0.92, 0.35, 0.45), false, 2.0)
+		for corner_pt in [
+			Vector2(inset + 5.0, inset + 5.0),
+			Vector2(s.x - inset - 5.0, inset + 5.0),
+			Vector2(inset + 5.0, s.y - inset - 5.0),
+			Vector2(s.x - inset - 5.0, s.y - inset - 5.0),
+		]:
+			panel.draw_circle(corner_pt, 3.0, Color(1.0, 0.95, 0.45, 0.85))
 
 
 func _draw_hold_ring(panel: Panel, _is_center: bool) -> void:
@@ -3268,6 +3310,7 @@ func _build_shop_row(category: String, item_def: Dictionary) -> Button:
 	var item_name: String = str(item_def.get("name", "?"))
 	var item_desc: String = str(item_def.get("desc", ""))
 	var cost: int = int(item_def.get("cost", 0))
+	var boss_unlock: int = int(item_def.get("boss_unlock", 0))
 	var item_col: Color = item_def.get("color", Color(0.2, 0.95, 1.0))
 
 	var unlocked := false
@@ -3283,7 +3326,7 @@ func _build_shop_row(category: String, item_def: Dictionary) -> Button:
 			unlocked = settings.is_sfx_pack_unlocked(item_id)
 			equipped = (settings.selected_sfx_pack == item_id)
 
-	var can_afford: bool = (settings.sparks >= cost)
+	var can_afford: bool = (boss_unlock <= 0) and (settings.sparks >= cost)
 
 	# Use empty button text + clip_contents + MOUSE_FILTER_PASS so mobile touch swipes scroll smoothly
 	var btn := Button.new()
@@ -3332,7 +3375,7 @@ func _build_shop_row(category: String, item_def: Dictionary) -> Button:
 	r_hover.set_border_color(Color(1, 1, 1, 0.9))
 	btn.add_theme_stylebox_override("hover", r_hover)
 	btn.add_theme_stylebox_override("pressed", r_hover)
-	btn.pressed.connect(_on_shop_item_pressed.bind(category, item_id, cost, item_name))
+	btn.pressed.connect(_on_shop_item_pressed.bind(category, item_id, cost, item_name, boss_unlock))
 
 	# 1. Left visual preview icon (42x42)
 	var preview_icon := Control.new()
@@ -3388,6 +3431,11 @@ func _build_shop_row(category: String, item_def: Dictionary) -> Button:
 		status_lbl.add_theme_font_size_override("font_size", 11)
 		status_lbl.add_theme_color_override("font_color", Color(0.35, 0.95, 1.0))
 		status_hbox.add_child(status_lbl)
+	elif boss_unlock > 0:
+		status_lbl.text = "🔒 LVL %d BOSS" % boss_unlock
+		status_lbl.add_theme_font_size_override("font_size", 11)
+		status_lbl.add_theme_color_override("font_color", Color(1.0, 0.72, 0.35))
+		status_hbox.add_child(status_lbl)
 	else:
 		var bolt_c := Color(0.35, 1.0, 0.60) if can_afford else Color(1.0, 0.85, 0.25)
 		status_hbox.add_child(_create_spark_icon(15.0, bolt_c))
@@ -3417,7 +3465,7 @@ func _build_shop_row(category: String, item_def: Dictionary) -> Button:
 	return btn
 
 
-func _on_shop_item_pressed(category: String, item_id: String, cost: int, item_name: String) -> void:
+func _on_shop_item_pressed(category: String, item_id: String, cost: int, item_name: String, boss_unlock: int = 0) -> void:
 	if _overlay_drag_active:
 		return
 
@@ -3449,6 +3497,20 @@ func _on_shop_item_pressed(category: String, item_id: String, cost: int, item_na
 		settings.save_data()
 		_haptic_tap()
 		_refresh_shop_screen()
+		return
+
+	# Item is locked — check if it is a Boss-Exclusive Reward!
+	if boss_unlock > 0:
+		if category == "sfx" and sfx != null and sfx.has_method("preview_pack"):
+			sfx.preview_pack(item_id)
+		else:
+			sfx.play("wrong")
+		_haptic_wrong()
+		if _shop_sparks_icon != null and is_instance_valid(_shop_sparks_icon):
+			_shop_sparks_icon.visible = false
+		if _shop_sparks_label != null and is_instance_valid(_shop_sparks_label):
+			_shop_sparks_label.text = "BEAT STORY LVL %d BOSS TO UNLOCK!" % boss_unlock
+			_shop_sparks_label.add_theme_color_override("font_color", Color(1.0, 0.78, 0.32))
 		return
 
 	# Item is locked — check if player has enough Neon Sparks
@@ -6238,9 +6300,13 @@ func _apply_lives_bezel() -> void:
 
 
 func _show_menu() -> void:
+	var was_story: bool = is_story_mode
 	is_story_mode = false
+	is_boss_rush = false
 	story_victory_animating = false
 	story_bomb_dir = ""
+	if was_story and _story_manager != null:
+		_story_manager.restore_normal_music()
 	_update_story_hud_visibility()
 	_set_state(settings.GameState.MENU)
 	_update_sparks_displays()
@@ -6256,6 +6322,10 @@ func _start_game() -> void:
 	_setup_initial_game_state()
 	if is_story_mode:
 		_reset_story_boss_state(story_level)
+	else:
+		is_boss_rush = false
+		if _story_manager != null:
+			_story_manager.restore_normal_music()
 	_update_story_hud_visibility()
 	_set_state(settings.GameState.PLAYING)
 	_update_high_score_display()
@@ -6397,16 +6467,24 @@ func _game_over() -> void:
 	if is_story_mode:
 		if story_level_won:
 			if go_title != null:
-				go_title.text = "BOSS DEFEATED!"
+				go_title.text = "BOSS RUSH CLEAR!" if is_boss_rush else "BOSS DEFEATED!"
 				go_title.add_theme_font_size_override("font_size", 22)
-				go_title.add_theme_color_override("font_color", Color(0.25, 1.0, 0.55))
+				go_title.add_theme_color_override("font_color", Color(1.0, 0.88, 0.25) if is_boss_rush else Color(0.25, 1.0, 0.55))
 			if new_record_badge != null:
-				new_record_badge.text = "★ LEVEL " + str(story_level) + " COMPLETE! ★"
+				if is_boss_rush:
+					var rush_t_str: String = _story_manager.format_time(story_boss_rush_elapsed) if _story_manager != null else "%.1fs" % story_boss_rush_elapsed
+					new_record_badge.text = "👑 ALL 4 BOSSES • " + rush_t_str + " 👑"
+				else:
+					var stars_str: String = _story_manager.format_stars_text(story_last_stars_earned) if _story_manager != null else "★"
+					var fight_t_str: String = _story_manager.format_time(story_fight_elapsed) if _story_manager != null else "%.1fs" % story_fight_elapsed
+					new_record_badge.text = stars_str + "  LVL " + str(story_level) + " • " + fight_t_str
 				new_record_badge.visible = true
 			if revive_btn != null:
 				revive_btn.visible = false
 			if retry_btn != null:
-				if story_level == 1:
+				if is_boss_rush:
+					retry_btn.text = "REPLAY BOSS RUSH"
+				elif story_level == 1:
 					retry_btn.text = "NEXT: LEVEL 2"
 				elif story_level == 2:
 					retry_btn.text = "NEXT: LEVEL 3"
@@ -6417,18 +6495,19 @@ func _game_over() -> void:
 				retry_btn.add_theme_font_size_override("font_size", 16)
 		else:
 			if go_title != null:
-				go_title.text = "BOSS WON!"
+				go_title.text = "RUSH FAILED!" if is_boss_rush else "BOSS WON!"
 				go_title.add_theme_font_size_override("font_size", 26)
 				go_title.add_theme_color_override("font_color", Color(1.0, 0.28, 0.34))
 			if new_record_badge != null:
 				var parts_left: int = _get_alive_boss_parts().size()
+				var rush_tag := ("RUSH %d/4 • " % story_level) if is_boss_rush else ""
 				if parts_left > 0:
-					new_record_badge.text = "PARTS LEFT: " + str(parts_left) + "/4  •  MAIN HP: " + str(story_boss_hp)
+					new_record_badge.text = rush_tag + "PARTS LEFT: " + str(parts_left) + "/4  •  HP: " + str(story_boss_hp)
 				else:
-					new_record_badge.text = "BOSS HP LEFT: " + str(story_boss_hp) + " / " + str(story_boss_max_hp)
+					new_record_badge.text = rush_tag + "BOSS HP LEFT: " + str(story_boss_hp) + " / " + str(story_boss_max_hp)
 				new_record_badge.visible = true
 			if retry_btn != null:
-				retry_btn.text = "RETRY BOSS"
+				retry_btn.text = "RETRY BOSS RUSH" if is_boss_rush else "RETRY BOSS"
 				retry_btn.add_theme_font_size_override("font_size", 18)
 	else:
 		if go_title != null:
@@ -6621,7 +6700,10 @@ func _revive_and_continue() -> void:
 func _on_retry_pressed() -> void:
 	sfx.play("tap")
 	_haptic_tap()
-	if is_story_mode and story_level_won:
+	if is_story_mode and is_boss_rush:
+		story_level = 1
+		story_boss_rush_elapsed = 0.0
+	elif is_story_mode and story_level_won:
 		if story_level == 1:
 			story_level = 2
 		elif story_level == 2:
@@ -9706,6 +9788,38 @@ func _draw_swipe_trail() -> void:
 				])
 				_swipe_trail.draw_colored_polygon(s_pts, Color(1.0, 1.0, 1.0, alpha * 0.92))
 
+		elif trail_id == "venom":
+			# VENOM MATRIX (Cyber Hydra Reward): Toxic emerald-cyan dual helix beam
+			var v_col := Color(0.15, 1.0, 0.62, alpha * 0.52)
+			var v_core := Color(0.75, 1.0, 0.92, alpha * 0.95)
+			_swipe_trail.draw_line(pos0, pos1, v_col, lerpf(6.0, 22.0, progress), true)
+			_swipe_trail.draw_line(pos0, pos1, v_core, lerpf(1.5, 5.0, progress), true)
+			var seg_v := pos1 - pos0
+			if seg_v.length() > 1.5:
+				var perp_v := Vector2(-seg_v.y, seg_v.x).normalized()
+				var wave_v := sin(float(i) * 1.4 + now * 18.0) * lerpf(4.0, 11.0, progress)
+				_swipe_trail.draw_circle((pos0 + pos1) * 0.5 + perp_v * wave_v, 3.0, Color(0.25, 1.0, 0.72, alpha * 0.92))
+				_swipe_trail.draw_circle((pos0 + pos1) * 0.5 - perp_v * wave_v, 2.5, Color(0.95, 0.35, 1.0, alpha * 0.75))
+
+		elif trail_id == "void_vortex":
+			# VOID VORTEX (Void Seraph Reward): Violet-gold singularity ribbon with swirling rings
+			var vv_outer := Color(0.72, 0.18, 1.0, alpha * 0.55)
+			var vv_gold := Color(1.0, 0.86, 0.32, alpha * 0.92)
+			_swipe_trail.draw_line(pos0, pos1, vv_outer, lerpf(7.0, 24.0, progress), true)
+			_swipe_trail.draw_line(pos0, pos1, Color(0.08, 0.02, 0.16, alpha * 0.90), lerpf(2.5, 8.0, progress), true)
+			_swipe_trail.draw_line(pos0, pos1, vv_gold, lerpf(1.2, 3.5, progress), true)
+			if i % 3 == 0:
+				_swipe_trail.draw_arc(pos1, lerpf(4.0, 10.0, progress), now * 5.0 + float(i), now * 5.0 + float(i) + PI * 1.3, 14, vv_gold, 2.0, true)
+
+		elif trail_id == "melody_notes":
+			# PHANTOM NOTES (Phantom Maestro Reward): Crimson-gold velvet ribbon with floating eighth-notes
+			var mn_outer := Color(0.92, 0.16, 0.32, alpha * 0.55)
+			var mn_gold := Color(1.0, 0.85, 0.35, alpha * 0.96)
+			_swipe_trail.draw_line(pos0, pos1, mn_outer, lerpf(6.0, 20.0, progress), true)
+			_swipe_trail.draw_line(pos0, pos1, mn_gold, lerpf(1.5, 5.0, progress), true)
+			if i % 3 == 0 and _story_manager != null and _story_manager.renderer != null:
+				_story_manager.renderer._draw_story_music_note(_swipe_trail, pos1 + Vector2(0.0, -6.0), lerpf(0.55, 1.0, progress), mn_gold)
+
 		else:
 			# NEON LASER (Default): Outer glowing neon stroke + core white stroke
 			var outer_w := lerpf(4.0, 18.0, progress)
@@ -9842,453 +9956,14 @@ func _emit_board_aura_ambient_particle() -> void:
 	_burst_particles(edge_pos, p_col, 2)
 
 
+
 # =====================================================
-# STORY MODE & BOSS FIGHT ARENA
+# STORY MODE & BOSS FIGHT ARENA (Delegated to story_mode/)
 # =====================================================
 
 func _setup_story_ui() -> void:
-	# 1. "STORY MODE" button directly under ARCADE MODE on MenuScreen
-	_story_button = Button.new()
-	_story_button.name = "StoryButton"
-	_story_button.text = "STORY MODE"
-	_story_button.anchor_left = 0.5
-	_story_button.anchor_right = 0.5
-	_story_button.offset_left = -128.0
-	_story_button.offset_right = 128.0
-	_story_button.offset_top = 480.0
-	_story_button.offset_bottom = 524.0
-	_story_button.clip_contents = true
-	_story_button.add_theme_font_size_override("font_size", 16)
-	_apply_menu_button_style(_story_button, _story_btn_style, _story_btn_hover_style)
-	_story_button.add_theme_color_override("font_color", Color(1.0, 0.98, 1.0, 1.0))
-	_story_button.add_theme_constant_override("outline_size", 5)
-	_story_button.add_theme_color_override("font_outline_color", Color(0.08, 0.02, 0.22, 1.0))
-	_story_button.pressed.connect(_open_story_screen)
-	menu_screen.add_child(_story_button)
-
-	# 2. Story Mode Level Selection Overlay Screen
-	_story_screen = Control.new()
-	_story_screen.name = "StoryScreen"
-	_story_screen.visible = false
-	_story_screen.anchor_right = 1.0
-	_story_screen.anchor_bottom = 1.0
-	_story_screen.z_index = 54
-	add_child(_story_screen)
-
-	var backdrop := ColorRect.new()
-	backdrop.name = "Backdrop"
-	backdrop.color = Color(0.02, 0.01, 0.06, 0.78)
-	backdrop.anchor_right = 1.0
-	backdrop.anchor_bottom = 1.0
-	backdrop.gui_input.connect(_on_story_backdrop_input)
-	_story_screen.add_child(backdrop)
-
-	var panel := Panel.new()
-	panel.name = "Panel"
-	panel.clip_contents = true
-	panel.add_theme_stylebox_override("panel", _pause_panel_style)
-	panel.anchor_left = 0.5
-	panel.anchor_right = 0.5
-	panel.anchor_top = 0.5
-	panel.anchor_bottom = 0.5
-	panel.offset_left = -220.0
-	panel.offset_right = 220.0
-	panel.offset_top = -410.0
-	panel.offset_bottom = 410.0
-	_story_screen.add_child(panel)
-
-	var title := Label.new()
-	title.name = "Title"
-	title.text = "STORY MODE"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 22)
-	title.add_theme_color_override("font_color", Color(0.45, 0.95, 1.0))
-	title.add_theme_color_override("font_outline_color", Color(0.08, 0.04, 0.22, 1.0))
-	title.add_theme_constant_override("outline_size", 7)
-	title.anchor_left = 0.5
-	title.anchor_right = 0.5
-	title.offset_left = -195.0
-	title.offset_right = 195.0
-	title.offset_top = 12.0
-	title.offset_bottom = 42.0
-	panel.add_child(title)
-
-	var sub := Label.new()
-	sub.name = "Subtitle"
-	sub.text = "SWIPE WHITE CENTER TO ANY SAFE COLOR TO ATTACK!"
-	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	sub.clip_text = true
-	sub.add_theme_font_size_override("font_size", 9)
-	sub.add_theme_color_override("font_color", Color(0.88, 0.85, 0.98))
-	sub.anchor_left = 0.5
-	sub.anchor_right = 0.5
-	sub.offset_left = -206.0
-	sub.offset_right = 206.0
-	sub.offset_top = 42.0
-	sub.offset_bottom = 60.0
-	panel.add_child(sub)
-
-	var locked_btn_style := StyleBoxFlat.new()
-	locked_btn_style.set_corner_radius_all(14)
-	locked_btn_style.bg_color = Color(0.11, 0.09, 0.18, 0.92)
-	locked_btn_style.set_border_width_all(2)
-	locked_btn_style.set_border_color(Color(0.38, 0.34, 0.52, 0.75))
-
-	# --- LEVEL 1 BOSS CARD (CHROMA TITAN) ---
-	var lvl1_card := Panel.new()
-	lvl1_card.name = "Level1Card"
-	lvl1_card.clip_contents = true
-	lvl1_card.anchor_left = 0.5
-	lvl1_card.anchor_right = 0.5
-	lvl1_card.offset_left = -194.0
-	lvl1_card.offset_right = 194.0
-	lvl1_card.offset_top = 64.0
-	lvl1_card.offset_bottom = 286.0
-	var card_style := StyleBoxFlat.new()
-	card_style.set_corner_radius_all(18)
-	card_style.bg_color = Color(0.10, 0.07, 0.22, 0.95)
-	card_style.set_border_width_all(3)
-	card_style.set_border_color(Color(0.35, 0.92, 1.0, 0.92))
-	card_style.set_shadow_color(Color(0.35, 0.85, 1.0, 0.38))
-	card_style.set_shadow_size(12)
-	lvl1_card.add_theme_stylebox_override("panel", card_style)
-	panel.add_child(lvl1_card)
-
-	_story_level1_preview_ctrl = Control.new()
-	_story_level1_preview_ctrl.name = "BossPreview"
-	_story_level1_preview_ctrl.position = Vector2(10.0, 10.0)
-	_story_level1_preview_ctrl.size = Vector2(96.0, 148.0)
-	_story_level1_preview_ctrl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_story_level1_preview_ctrl.draw.connect(_draw_story_level1_preview)
-	lvl1_card.add_child(_story_level1_preview_ctrl)
-
-	var lvl1_title := Label.new()
-	lvl1_title.name = "Level1Title"
-	lvl1_title.text = "LVL 1: CHROMA TITAN"
-	lvl1_title.clip_text = true
-	lvl1_title.offset_left = 114.0
-	lvl1_title.offset_right = 378.0
-	lvl1_title.offset_top = 10.0
-	lvl1_title.offset_bottom = 32.0
-	lvl1_title.add_theme_font_size_override("font_size", 12)
-	lvl1_title.add_theme_color_override("font_color", Color(1.0, 0.95, 0.35))
-	lvl1_title.add_theme_color_override("font_outline_color", Color(0.08, 0.04, 0.18, 1.0))
-	lvl1_title.add_theme_constant_override("outline_size", 4)
-	lvl1_card.add_child(lvl1_title)
-
-	_story_level1_status_label = Label.new()
-	_story_level1_status_label.name = "Level1Status"
-	_story_level1_status_label.text = "4 PARTS + 15 HP  •  REWARD: +50⚡"
-	_story_level1_status_label.clip_text = true
-	_story_level1_status_label.offset_left = 114.0
-	_story_level1_status_label.offset_right = 378.0
-	_story_level1_status_label.offset_top = 32.0
-	_story_level1_status_label.offset_bottom = 50.0
-	_story_level1_status_label.add_theme_font_size_override("font_size", 9)
-	_story_level1_status_label.add_theme_color_override("font_color", Color(0.30, 1.0, 0.65))
-	lvl1_card.add_child(_story_level1_status_label)
-
-	var lvl1_desc := Label.new()
-	lvl1_desc.name = "Level1Desc"
-	lvl1_desc.text = "• Center is WHITE: swipe to ANY color!\n• Destroy all 4 colored Body Parts first!\n• Then drain the Boss's Main HP!\n• Avoid BOMBS (1 → 2 → 3 Bombs)!"
-	lvl1_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	lvl1_desc.clip_text = true
-	lvl1_desc.offset_left = 114.0
-	lvl1_desc.offset_right = 378.0
-	lvl1_desc.offset_top = 52.0
-	lvl1_desc.offset_bottom = 164.0
-	lvl1_desc.add_theme_font_size_override("font_size", 9)
-	lvl1_desc.add_theme_constant_override("line_spacing", 2)
-	lvl1_desc.add_theme_color_override("font_color", Color(0.92, 0.94, 1.0))
-	lvl1_card.add_child(lvl1_desc)
-
-	var fight_btn := Button.new()
-	fight_btn.name = "FightBossBtn"
-	fight_btn.text = "⚔  FIGHT TITAN  ⚔"
-	fight_btn.clip_contents = true
-	fight_btn.anchor_left = 0.5
-	fight_btn.anchor_right = 0.5
-	fight_btn.offset_left = -166.0
-	fight_btn.offset_right = 166.0
-	fight_btn.offset_top = 168.0
-	fight_btn.offset_bottom = 210.0
-	fight_btn.add_theme_font_size_override("font_size", 14)
-	_apply_menu_button_style(fight_btn, _play_btn_style, _play_btn_hover_style)
-	fight_btn.pressed.connect(_on_story_level_selected.bind(1))
-	lvl1_card.add_child(fight_btn)
-
-	# --- LEVEL 2 BOSS CARD (CYBER HYDRA — NO BOMBS, REFLECTIVE SHIELDS & REGROWTH) ---
-	var lvl2_card := Panel.new()
-	lvl2_card.name = "Level2Card"
-	lvl2_card.clip_contents = true
-	lvl2_card.anchor_left = 0.5
-	lvl2_card.anchor_right = 0.5
-	lvl2_card.offset_left = -194.0
-	lvl2_card.offset_right = 194.0
-	lvl2_card.offset_top = 296.0
-	lvl2_card.offset_bottom = 518.0
-	var hydra_card_style := StyleBoxFlat.new()
-	hydra_card_style.set_corner_radius_all(18)
-	hydra_card_style.bg_color = Color(0.07, 0.14, 0.18, 0.95)
-	hydra_card_style.set_border_width_all(3)
-	hydra_card_style.set_border_color(Color(0.22, 1.0, 0.72, 0.92))
-	hydra_card_style.set_shadow_color(Color(0.18, 0.95, 0.68, 0.38))
-	hydra_card_style.set_shadow_size(12)
-	lvl2_card.add_theme_stylebox_override("panel", hydra_card_style)
-	panel.add_child(lvl2_card)
-
-	_story_level2_preview_ctrl = Control.new()
-	_story_level2_preview_ctrl.name = "BossPreview2"
-	_story_level2_preview_ctrl.position = Vector2(10.0, 10.0)
-	_story_level2_preview_ctrl.size = Vector2(96.0, 148.0)
-	_story_level2_preview_ctrl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_story_level2_preview_ctrl.draw.connect(_draw_story_level2_preview)
-	lvl2_card.add_child(_story_level2_preview_ctrl)
-
-	var lvl2_title := Label.new()
-	lvl2_title.name = "Level2Title"
-	lvl2_title.text = "LVL 2: CYBER HYDRA"
-	lvl2_title.clip_text = true
-	lvl2_title.offset_left = 114.0
-	lvl2_title.offset_right = 378.0
-	lvl2_title.offset_top = 10.0
-	lvl2_title.offset_bottom = 32.0
-	lvl2_title.add_theme_font_size_override("font_size", 12)
-	lvl2_title.add_theme_color_override("font_color", Color(0.30, 1.0, 0.75))
-	lvl2_title.add_theme_color_override("font_outline_color", Color(0.04, 0.12, 0.14, 1.0))
-	lvl2_title.add_theme_constant_override("outline_size", 4)
-	lvl2_card.add_child(lvl2_title)
-
-	_story_level2_status_label = Label.new()
-	_story_level2_status_label.name = "Level2Status"
-	_story_level2_status_label.text = "🔒 LOCKED — BEAT LEVEL 1 FIRST!"
-	_story_level2_status_label.clip_text = true
-	_story_level2_status_label.offset_left = 114.0
-	_story_level2_status_label.offset_right = 378.0
-	_story_level2_status_label.offset_top = 32.0
-	_story_level2_status_label.offset_bottom = 50.0
-	_story_level2_status_label.add_theme_font_size_override("font_size", 9)
-	_story_level2_status_label.add_theme_color_override("font_color", Color(1.0, 0.90, 0.28))
-	lvl2_card.add_child(_story_level2_status_label)
-
-	var lvl2_desc := Label.new()
-	lvl2_desc.name = "Level2Desc"
-	lvl2_desc.text = "• NO BOMBS! Shields block squares!\n• Hit a Shield: -1 Life & Hydra HEALS!\n• Swiping dead heads REGROWS (+2 HP)!\n• Sever all 4 Heads, then drain Main HP!"
-	lvl2_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	lvl2_desc.clip_text = true
-	lvl2_desc.offset_left = 114.0
-	lvl2_desc.offset_right = 378.0
-	lvl2_desc.offset_top = 52.0
-	lvl2_desc.offset_bottom = 164.0
-	lvl2_desc.add_theme_font_size_override("font_size", 9)
-	lvl2_desc.add_theme_constant_override("line_spacing", 2)
-	lvl2_desc.add_theme_color_override("font_color", Color(0.92, 0.98, 0.96))
-	lvl2_card.add_child(lvl2_desc)
-
-	_story_level2_fight_btn = Button.new()
-	_story_level2_fight_btn.name = "FightHydraBtn"
-	_story_level2_fight_btn.text = "⚔  FIGHT HYDRA  ⚔"
-	_story_level2_fight_btn.clip_contents = true
-	_story_level2_fight_btn.anchor_left = 0.5
-	_story_level2_fight_btn.anchor_right = 0.5
-	_story_level2_fight_btn.offset_left = -166.0
-	_story_level2_fight_btn.offset_right = 166.0
-	_story_level2_fight_btn.offset_top = 168.0
-	_story_level2_fight_btn.offset_bottom = 210.0
-	_story_level2_fight_btn.add_theme_font_size_override("font_size", 14)
-	_apply_menu_button_style(_story_level2_fight_btn, _story_btn_style, _story_btn_hover_style)
-	_story_level2_fight_btn.add_theme_stylebox_override("disabled", locked_btn_style)
-	_story_level2_fight_btn.add_theme_color_override("font_disabled_color", Color(0.70, 0.68, 0.82))
-	_story_level2_fight_btn.pressed.connect(_on_story_level_selected.bind(2))
-	lvl2_card.add_child(_story_level2_fight_btn)
-
-	# --- LEVEL 3 BOSS CARD (VOID SERAPH — VOID RIFTS & DIMENSIONAL COLOR WARP) ---
-	var lvl3_card := Panel.new()
-	lvl3_card.name = "Level3Card"
-	lvl3_card.clip_contents = true
-	lvl3_card.anchor_left = 0.5
-	lvl3_card.anchor_right = 0.5
-	lvl3_card.offset_left = -194.0
-	lvl3_card.offset_right = 194.0
-	lvl3_card.offset_top = 528.0
-	lvl3_card.offset_bottom = 750.0
-	var seraph_card_style := StyleBoxFlat.new()
-	seraph_card_style.set_corner_radius_all(18)
-	seraph_card_style.bg_color = Color(0.13, 0.06, 0.22, 0.95)
-	seraph_card_style.set_border_width_all(3)
-	seraph_card_style.set_border_color(Color(0.88, 0.35, 1.0, 0.92))
-	seraph_card_style.set_shadow_color(Color(0.82, 0.25, 1.0, 0.38))
-	seraph_card_style.set_shadow_size(12)
-	lvl3_card.add_theme_stylebox_override("panel", seraph_card_style)
-	panel.add_child(lvl3_card)
-
-	_story_level3_preview_ctrl = Control.new()
-	_story_level3_preview_ctrl.name = "BossPreview3"
-	_story_level3_preview_ctrl.position = Vector2(10.0, 10.0)
-	_story_level3_preview_ctrl.size = Vector2(96.0, 148.0)
-	_story_level3_preview_ctrl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_story_level3_preview_ctrl.draw.connect(_draw_story_level3_preview)
-	lvl3_card.add_child(_story_level3_preview_ctrl)
-
-	var lvl3_title := Label.new()
-	lvl3_title.name = "Level3Title"
-	lvl3_title.text = "LVL 3: VOID SERAPH"
-	lvl3_title.clip_text = true
-	lvl3_title.offset_left = 114.0
-	lvl3_title.offset_right = 378.0
-	lvl3_title.offset_top = 10.0
-	lvl3_title.offset_bottom = 32.0
-	lvl3_title.add_theme_font_size_override("font_size", 12)
-	lvl3_title.add_theme_color_override("font_color", Color(0.92, 0.55, 1.0))
-	lvl3_title.add_theme_color_override("font_outline_color", Color(0.10, 0.03, 0.16, 1.0))
-	lvl3_title.add_theme_constant_override("outline_size", 4)
-	lvl3_card.add_child(lvl3_title)
-
-	_story_level3_status_label = Label.new()
-	_story_level3_status_label.name = "Level3Status"
-	_story_level3_status_label.text = "🔒 LOCKED — BEAT LEVEL 2 FIRST!"
-	_story_level3_status_label.clip_text = true
-	_story_level3_status_label.offset_left = 114.0
-	_story_level3_status_label.offset_right = 378.0
-	_story_level3_status_label.offset_top = 32.0
-	_story_level3_status_label.offset_bottom = 50.0
-	_story_level3_status_label.add_theme_font_size_override("font_size", 9)
-	_story_level3_status_label.add_theme_color_override("font_color", Color(1.0, 0.90, 0.28))
-	lvl3_card.add_child(_story_level3_status_label)
-
-	var lvl3_desc := Label.new()
-	lvl3_desc.name = "Level3Desc"
-	lvl3_desc.text = "• Void Rifts lock last swiped square!\n• Board colors WARP after every attack!\n• Dead wings DRAIN +2 HP to Boss Core!\n• Shatter 4 Wings, then drain Main HP!"
-	lvl3_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	lvl3_desc.clip_text = true
-	lvl3_desc.offset_left = 114.0
-	lvl3_desc.offset_right = 378.0
-	lvl3_desc.offset_top = 52.0
-	lvl3_desc.offset_bottom = 164.0
-	lvl3_desc.add_theme_font_size_override("font_size", 9)
-	lvl3_desc.add_theme_constant_override("line_spacing", 2)
-	lvl3_desc.add_theme_color_override("font_color", Color(0.96, 0.92, 1.0))
-	lvl3_card.add_child(lvl3_desc)
-
-	var seraph_btn_style := _story_btn_style.duplicate() as StyleBoxFlat
-	seraph_btn_style.bg_color = Color(0.55, 0.14, 0.88, 0.94)
-	seraph_btn_style.border_color = Color(1.0, 0.85, 0.35, 0.95)
-	seraph_btn_style.shadow_color = Color(0.75, 0.22, 1.0, 0.55)
-	var seraph_btn_hover_style := _story_btn_hover_style.duplicate() as StyleBoxFlat
-	seraph_btn_hover_style.bg_color = Color(0.68, 0.22, 0.98, 0.98)
-	seraph_btn_hover_style.border_color = Color(1.0, 0.92, 0.55, 1.0)
-	seraph_btn_hover_style.shadow_color = Color(0.85, 0.35, 1.0, 0.72)
-
-	_story_level3_fight_btn = Button.new()
-	_story_level3_fight_btn.name = "FightSeraphBtn"
-	_story_level3_fight_btn.text = "⚔  FIGHT SERAPH  ⚔"
-	_story_level3_fight_btn.clip_contents = true
-	_story_level3_fight_btn.anchor_left = 0.5
-	_story_level3_fight_btn.anchor_right = 0.5
-	_story_level3_fight_btn.offset_left = -166.0
-	_story_level3_fight_btn.offset_right = 166.0
-	_story_level3_fight_btn.offset_top = 168.0
-	_story_level3_fight_btn.offset_bottom = 210.0
-	_story_level3_fight_btn.add_theme_font_size_override("font_size", 14)
-	_apply_menu_button_style(_story_level3_fight_btn, seraph_btn_style, seraph_btn_hover_style)
-	_story_level3_fight_btn.add_theme_stylebox_override("disabled", locked_btn_style)
-	_story_level3_fight_btn.add_theme_color_override("font_disabled_color", Color(0.70, 0.68, 0.82))
-	_story_level3_fight_btn.pressed.connect(_on_story_level_selected.bind(3))
-	lvl3_card.add_child(_story_level3_fight_btn)
-
-	# --- LEVEL 4 BOSS CARD (PHANTOM MAESTRO — MELODIES, MIRROR CURSE & MASQUERADE) ---
-	var lvl4_card := Panel.new()
-	lvl4_card.name = "Level4Card"
-	lvl4_card.clip_contents = true
-	lvl4_card.anchor_left = 0.5
-	lvl4_card.anchor_right = 0.5
-	lvl4_card.offset_left = -194.0
-	lvl4_card.offset_right = 194.0
-	var maestro_card_style := StyleBoxFlat.new()
-	maestro_card_style.set_corner_radius_all(18)
-	maestro_card_style.bg_color = Color(0.17, 0.05, 0.09, 0.95)
-	maestro_card_style.set_border_width_all(3)
-	maestro_card_style.set_border_color(Color(1.0, 0.72, 0.30, 0.92))
-	maestro_card_style.set_shadow_color(Color(1.0, 0.30, 0.40, 0.38))
-	maestro_card_style.set_shadow_size(12)
-	lvl4_card.add_theme_stylebox_override("panel", maestro_card_style)
-	panel.add_child(lvl4_card)
-
-	_story_level4_preview_ctrl = Control.new()
-	_story_level4_preview_ctrl.name = "BossPreview4"
-	_story_level4_preview_ctrl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_story_level4_preview_ctrl.draw.connect(_draw_story_level4_preview)
-	lvl4_card.add_child(_story_level4_preview_ctrl)
-
-	var lvl4_title := Label.new()
-	lvl4_title.name = "Level4Title"
-	lvl4_title.text = "LVL 4: PHANTOM MAESTRO"
-	lvl4_title.clip_text = true
-	lvl4_title.add_theme_font_size_override("font_size", 12)
-	lvl4_title.add_theme_color_override("font_color", Color(1.0, 0.78, 0.35))
-	lvl4_title.add_theme_color_override("font_outline_color", Color(0.16, 0.03, 0.06, 1.0))
-	lvl4_title.add_theme_constant_override("outline_size", 4)
-	lvl4_card.add_child(lvl4_title)
-
-	_story_level4_status_label = Label.new()
-	_story_level4_status_label.name = "Level4Status"
-	_story_level4_status_label.text = "🔒 LOCKED — BEAT LEVEL 3 FIRST!"
-	_story_level4_status_label.clip_text = true
-	_story_level4_status_label.add_theme_font_size_override("font_size", 9)
-	_story_level4_status_label.add_theme_color_override("font_color", Color(1.0, 0.90, 0.28))
-	lvl4_card.add_child(_story_level4_status_label)
-
-	var lvl4_desc := Label.new()
-	lvl4_desc.name = "Level4Desc"
-	lvl4_desc.text = "• Play his MELODY: swipe notes 1 → 2 → 3!\n• Wrong note: -1 Life & melody resets!\n• MIRROR curse REVERSES your swipes!\n• Phase 2: remember the TRUE MASK!"
-	lvl4_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	lvl4_desc.clip_text = true
-	lvl4_desc.add_theme_font_size_override("font_size", 9)
-	lvl4_desc.add_theme_constant_override("line_spacing", 2)
-	lvl4_desc.add_theme_color_override("font_color", Color(1.0, 0.93, 0.90))
-	lvl4_card.add_child(lvl4_desc)
-
-	var maestro_btn_style := _story_btn_style.duplicate() as StyleBoxFlat
-	maestro_btn_style.bg_color = Color(0.78, 0.16, 0.26, 0.94)
-	maestro_btn_style.border_color = Color(1.0, 0.82, 0.38, 0.95)
-	maestro_btn_style.shadow_color = Color(1.0, 0.28, 0.35, 0.55)
-	var maestro_btn_hover_style := _story_btn_hover_style.duplicate() as StyleBoxFlat
-	maestro_btn_hover_style.bg_color = Color(0.92, 0.24, 0.32, 0.98)
-	maestro_btn_hover_style.border_color = Color(1.0, 0.90, 0.55, 1.0)
-	maestro_btn_hover_style.shadow_color = Color(1.0, 0.40, 0.42, 0.72)
-
-	_story_level4_fight_btn = Button.new()
-	_story_level4_fight_btn.name = "FightMaestroBtn"
-	_story_level4_fight_btn.text = "⚔  FIGHT MAESTRO  ⚔"
-	_story_level4_fight_btn.clip_contents = true
-	_apply_menu_button_style(_story_level4_fight_btn, maestro_btn_style, maestro_btn_hover_style)
-	_story_level4_fight_btn.add_theme_stylebox_override("disabled", locked_btn_style)
-	_story_level4_fight_btn.add_theme_color_override("font_disabled_color", Color(0.70, 0.68, 0.82))
-	_story_level4_fight_btn.pressed.connect(_on_story_level_selected.bind(4))
-	lvl4_card.add_child(_story_level4_fight_btn)
-
-	# Compact layout so all 4 Boss Cards fit inside the Story panel
-	_layout_story_level_cards(panel)
-
-	# --- CLOSE / BACK BUTTON ---
-	var back_btn := Button.new()
-	back_btn.name = "BackStoryBtn"
-	back_btn.text = "BACK"
-	back_btn.clip_contents = true
-	back_btn.anchor_left = 0.5
-	back_btn.anchor_right = 0.5
-	back_btn.offset_left = -100.0
-	back_btn.offset_right = 100.0
-	back_btn.offset_top = 762.0
-	back_btn.offset_bottom = 804.0
-	back_btn.add_theme_font_size_override("font_size", 15)
-	back_btn.add_theme_color_override("font_color", Color(1, 1, 1, 1))
-	back_btn.add_theme_stylebox_override("normal", _btn_style)
-	back_btn.add_theme_stylebox_override("hover", _btn_style)
-	back_btn.add_theme_stylebox_override("pressed", _btn_style)
-	back_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-	back_btn.pressed.connect(_close_story_screen)
-	panel.add_child(back_btn)
+	if _story_manager != null:
+		_story_manager.setup_story_ui()
 
 
 func _on_story_backdrop_input(event: InputEvent) -> void:
@@ -10312,2750 +9987,111 @@ func _close_story_screen() -> void:
 
 
 func _refresh_story_screen() -> void:
-	var lv1_cleared: bool = settings != null and settings.is_story_level_cleared(1)
-	var lv2_cleared: bool = settings != null and settings.is_story_level_cleared(2)
-	var lv3_cleared: bool = settings != null and settings.is_story_level_cleared(3)
-
-	if _story_level1_status_label != null and is_instance_valid(_story_level1_status_label):
-		if lv1_cleared:
-			_story_level1_status_label.text = "★ CLEARED! ★  (REPLAY: +15⚡)"
-			_story_level1_status_label.add_theme_color_override("font_color", Color(0.25, 1.0, 0.55))
-		else:
-			_story_level1_status_label.text = "4 PARTS + 15 HP  •  REWARD: +50⚡"
-			_story_level1_status_label.add_theme_color_override("font_color", Color(1.0, 0.90, 0.28))
-
-	if _story_level2_status_label != null and is_instance_valid(_story_level2_status_label):
-		if not lv1_cleared:
-			_story_level2_status_label.text = "🔒 LOCKED — BEAT LEVEL 1 FIRST!"
-			_story_level2_status_label.add_theme_color_override("font_color", Color(1.0, 0.55, 0.48))
-		elif lv2_cleared:
-			_story_level2_status_label.text = "★ CLEARED! ★  (REPLAY: +25⚡)"
-			_story_level2_status_label.add_theme_color_override("font_color", Color(0.25, 1.0, 0.55))
-		else:
-			_story_level2_status_label.text = "4 HEADS + 18 HP  •  REWARD: +75⚡"
-			_story_level2_status_label.add_theme_color_override("font_color", Color(1.0, 0.90, 0.28))
-	if _story_level2_fight_btn != null and is_instance_valid(_story_level2_fight_btn):
-		_story_level2_fight_btn.disabled = not lv1_cleared
-		_story_level2_fight_btn.text = "⚔  FIGHT HYDRA  ⚔" if lv1_cleared else "🔒  BEAT LVL 1 TO UNLOCK"
-
-	if _story_level3_status_label != null and is_instance_valid(_story_level3_status_label):
-		if not lv2_cleared:
-			_story_level3_status_label.text = "🔒 LOCKED — BEAT LEVEL 2 FIRST!"
-			_story_level3_status_label.add_theme_color_override("font_color", Color(1.0, 0.55, 0.48))
-		elif lv3_cleared:
-			_story_level3_status_label.text = "★ CLEARED! ★  (REPLAY: +40⚡)"
-			_story_level3_status_label.add_theme_color_override("font_color", Color(0.25, 1.0, 0.55))
-		else:
-			_story_level3_status_label.text = "4 WINGS + 20 HP  •  REWARD: +100⚡"
-			_story_level3_status_label.add_theme_color_override("font_color", Color(1.0, 0.90, 0.28))
-	if _story_level3_fight_btn != null and is_instance_valid(_story_level3_fight_btn):
-		_story_level3_fight_btn.disabled = not lv2_cleared
-		_story_level3_fight_btn.text = "⚔  FIGHT SERAPH  ⚔" if lv2_cleared else "🔒  BEAT LVL 2 TO UNLOCK"
-
-	var lv4_cleared: bool = settings != null and settings.is_story_level_cleared(4)
-	if _story_level4_status_label != null and is_instance_valid(_story_level4_status_label):
-		if not lv3_cleared:
-			_story_level4_status_label.text = "🔒 LOCKED — BEAT LEVEL 3 FIRST!"
-			_story_level4_status_label.add_theme_color_override("font_color", Color(1.0, 0.55, 0.48))
-		elif lv4_cleared:
-			_story_level4_status_label.text = "★ CLEARED! ★  (REPLAY: +60⚡)"
-			_story_level4_status_label.add_theme_color_override("font_color", Color(0.25, 1.0, 0.55))
-		else:
-			_story_level4_status_label.text = "4 INSTRUMENTS + 22 HP  •  REWARD: +150⚡"
-			_story_level4_status_label.add_theme_color_override("font_color", Color(1.0, 0.90, 0.28))
-	if _story_level4_fight_btn != null and is_instance_valid(_story_level4_fight_btn):
-		_story_level4_fight_btn.disabled = not lv3_cleared
-		_story_level4_fight_btn.text = "⚔  FIGHT MAESTRO  ⚔" if lv3_cleared else "🔒  BEAT LVL 3 TO UNLOCK"
-	if _story_level4_preview_ctrl != null and is_instance_valid(_story_level4_preview_ctrl):
-		_story_level4_preview_ctrl.queue_redraw()
-
-	if _story_level1_preview_ctrl != null and is_instance_valid(_story_level1_preview_ctrl):
-		_story_level1_preview_ctrl.queue_redraw()
-	if _story_level2_preview_ctrl != null and is_instance_valid(_story_level2_preview_ctrl):
-		_story_level2_preview_ctrl.queue_redraw()
-	if _story_level3_preview_ctrl != null and is_instance_valid(_story_level3_preview_ctrl):
-		_story_level3_preview_ctrl.queue_redraw()
+	if _story_manager != null:
+		_story_manager.refresh_story_screen()
 
 
 func _on_story_level_selected(level_num: int) -> void:
-	if level_num == 2 and (settings == null or not settings.is_story_level_cleared(1)):
-		sfx.play("wrong")
-		_haptic_wrong()
-		return
-	if level_num == 3 and (settings == null or not settings.is_story_level_cleared(2)):
-		sfx.play("wrong")
-		_haptic_wrong()
-		return
-	if level_num == 4 and (settings == null or not settings.is_story_level_cleared(3)):
-		sfx.play("wrong")
-		_haptic_wrong()
-		return
-	sfx.play("tap")
-	_haptic_tap()
-	_story_screen.visible = false
-	is_story_mode = true
-	story_level = level_num
-	_fade_transition(_start_game)
+	if _story_manager != null:
+		_story_manager.on_story_level_selected(level_num)
+
+
+func _start_boss_rush() -> void:
+	if _story_manager != null:
+		_story_manager.start_boss_rush()
 
 
 func _setup_story_boss_arena() -> void:
-	if game_screen == null:
-		return
-
-	_story_boss_hud = Control.new()
-	_story_boss_hud.name = "StoryBossHUD"
-	_story_boss_hud.visible = false
-	_story_boss_hud.anchor_right = 1.0
-	_story_boss_hud.anchor_bottom = 1.0
-	_story_boss_hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_story_boss_hud.z_index = 0
-	game_screen.add_child(_story_boss_hud)
-
-	_story_boss_name_label = Label.new()
-	_story_boss_name_label.name = "BossNameLabel"
-	_story_boss_name_label.text = "⚔ LVL 1: CHROMA TITAN (PARTS: 4/4) ⚔"
-	_story_boss_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_story_boss_name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_story_boss_name_label.clip_text = true
-	_story_boss_name_label.add_theme_font_size_override("font_size", 12)
-	_story_boss_name_label.add_theme_color_override("font_color", Color(0.45, 0.96, 1.0))
-	_story_boss_name_label.add_theme_color_override("font_outline_color", Color(0.06, 0.02, 0.16, 1.0))
-	_story_boss_name_label.add_theme_constant_override("outline_size", 5)
-	_story_boss_name_label.anchor_left = 0.0
-	_story_boss_name_label.anchor_right = 1.0
-	_story_boss_name_label.offset_left = 16.0
-	_story_boss_name_label.offset_right = -16.0
-	_story_boss_name_label.offset_top = 52.0
-	_story_boss_name_label.offset_bottom = 76.0
-	_story_boss_name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_story_boss_hud.add_child(_story_boss_name_label)
-
-	_story_boss_canvas = Control.new()
-	_story_boss_canvas.name = "StoryBossCanvas"
-	_story_boss_canvas.anchor_left = 0.0
-	_story_boss_canvas.anchor_right = 1.0
-	_story_boss_canvas.offset_left = 0.0
-	_story_boss_canvas.offset_right = 0.0
-	_story_boss_canvas.offset_top = 74.0
-	var offset: float = settings.board_vertical_offset if settings != null else 0.0
-	_story_boss_canvas.offset_bottom = clampf(418.0 + minf(0.0, offset * 0.85), 330.0, 425.0)
-	_story_boss_canvas.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_story_boss_canvas.draw.connect(_draw_story_boss_arena)
-	_story_boss_hud.add_child(_story_boss_canvas)
-
-	_story_boss_hp_label = Label.new()
-	_story_boss_hp_label.name = "BossHPLabel"
-	_story_boss_hp_label.text = "🛡️ SHIELDED (15/15) — BREAK 4 PARTS!"
-	_story_boss_hp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_story_boss_hp_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_story_boss_hp_label.clip_text = true
-	_story_boss_hp_label.add_theme_font_size_override("font_size", 10)
-	_story_boss_hp_label.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0))
-	_story_boss_hp_label.add_theme_color_override("font_outline_color", Color(0.05, 0.02, 0.14, 1.0))
-	_story_boss_hp_label.add_theme_constant_override("outline_size", 4)
-	_story_boss_hp_label.anchor_left = 0.5
-	_story_boss_hp_label.anchor_right = 0.5
-	_story_boss_hp_label.offset_left = -204.0
-	_story_boss_hp_label.offset_right = 204.0
-	_story_boss_hp_label.offset_top = 78.0
-	_story_boss_hp_label.offset_bottom = 98.0
-	_story_boss_hp_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_story_boss_hud.add_child(_story_boss_hp_label)
+	if _story_manager != null:
+		_story_manager.setup_story_boss_arena()
 
 
 func _update_story_hud_visibility() -> void:
-	if score_label != null and is_instance_valid(score_label):
-		score_label.visible = not is_story_mode
-	if high_score_label != null and is_instance_valid(high_score_label):
-		high_score_label.visible = not is_story_mode
-	if _combo_container != null and is_instance_valid(_combo_container):
-		_combo_container.visible = not is_story_mode
-	if _story_boss_hud != null and is_instance_valid(_story_boss_hud):
-		_story_boss_hud.visible = is_story_mode
+	if _story_manager != null:
+		_story_manager.update_story_hud_visibility()
 
 
 func _are_all_boss_parts_destroyed() -> bool:
-	for d: String in ["up", "down", "left", "right"]:
-		if int(story_part_hp.get(d, 0)) > 0:
-			return false
-	return true
+	return _story_manager.are_all_boss_parts_destroyed() if _story_manager != null else false
 
 
 func _get_alive_boss_parts() -> Array[String]:
-	var alive: Array[String] = []
-	for d: String in ["up", "down", "left", "right"]:
-		if int(story_part_hp.get(d, 0)) > 0:
-			alive.append(d)
-	return alive
+	return _story_manager.get_alive_boss_parts() if _story_manager != null else []
 
 
 func _get_story_bomb_count() -> int:
-	var broken_count: int = 4 - _get_alive_boss_parts().size()
-	if broken_count >= 4:
-		return 3
-	if broken_count >= 2:
-		return 2
-	return 1
+	return _story_manager.get_story_bomb_count() if _story_manager != null else 1
 
 
 func _reset_story_boss_state(level_num: int = 1) -> void:
-	story_level = level_num
-	story_boss_max_hp = 22 if story_level == 4 else (20 if story_level == 3 else (18 if story_level == 2 else 15))
-	story_boss_hp = story_boss_max_hp
-	story_boss_ghost_hp = float(story_boss_max_hp)
-	story_part_max_hp = 5
-	story_part_hp = {
-		"up": story_part_max_hp,
-		"down": story_part_max_hp,
-		"left": story_part_max_hp,
-		"right": story_part_max_hp,
-	}
-	direction_colors = _get_theme().get("board", {}).duplicate()
-	_story_last_swiped_dir = ""
-	_story_l4_sequence.clear()
-	_story_l4_seq_index = 0
-	_story_l4_mirror_swipes = 0
-	_story_l4_mirror_pending = false
-	_story_l4_turns_until_mirror = 4
-	_story_l4_true_dir = ""
-	_story_l4_reveal_left = 0.0
-	story_bomb_dir = ""
-	story_bomb_dirs.clear()
-	story_boss_enraged = false
-	story_victory_animating = false
-	story_level_won = false
-	_boss_anim_time = 0.0
-	_boss_hit_shake = 0.0
-	_boss_taunt_anim = 0.0
-	_boss_throw_anim = 0.0
-	_boss_throw_target_dir = ""
-	_boss_throw_target_dirs.clear()
-	_boss_death_progress = 0.0
-	_boss_part_flash = {"up": 0.0, "down": 0.0, "left": 0.0, "right": 0.0}
-	_boss_part_recoil = {"up": 0.0, "down": 0.0, "left": 0.0, "right": 0.0}
-	_boss_laser_beams.clear()
-	_boss_explosion_shrapnel.clear()
-	_boss_explosion_rings.clear()
-	_update_story_boss_labels()
-
-
-func _warp_story_level3_colors(avoid_dir: String = "") -> void:
-	var dirs: Array[String] = ["up", "down", "left", "right"]
-	var old_cols: Dictionary = {}
-	var old_hp: Dictionary = {}
-	var old_flash: Dictionary = {}
-	var old_recoil: Dictionary = {}
-	var any_alive: bool = false
-	for d: String in dirs:
-		old_cols[d] = direction_colors.get(d, Color.WHITE)
-		var hp_v: int = int(story_part_hp.get(d, 0))
-		old_hp[d] = hp_v
-		if hp_v > 0:
-			any_alive = true
-		old_flash[d] = float(_boss_part_flash.get(d, 0.0))
-		old_recoil[d] = float(_boss_part_recoil.get(d, 0.0))
-
-	var chosen_perm: Array[String] = ["left", "up", "right", "down"]
-	for _attempt in range(16):
-		var candidate: Array[String] = dirs.duplicate()
-		candidate.shuffle()
-		var is_identity: bool = true
-		var has_safe_alive: bool = (not any_alive) or avoid_dir == ""
-		for i in range(4):
-			if candidate[i] != dirs[i]:
-				is_identity = false
-			if dirs[i] != avoid_dir and int(old_hp.get(candidate[i], 0)) > 0:
-				has_safe_alive = true
-		if not is_identity and has_safe_alive:
-			chosen_perm = candidate
-			break
-
-	if any_alive and avoid_dir != "":
-		var check_safe: bool = false
-		for i in range(4):
-			if dirs[i] != avoid_dir and int(old_hp.get(chosen_perm[i], 0)) > 0:
-				check_safe = true
-				break
-		if not check_safe:
-			var avoid_idx: int = dirs.find(avoid_dir)
-			var other_idx: int = (avoid_idx + 1) % 4
-			var tmp_d: String = chosen_perm[avoid_idx]
-			chosen_perm[avoid_idx] = chosen_perm[other_idx]
-			chosen_perm[other_idx] = tmp_d
-
-	for i in range(4):
-		var dst_d: String = dirs[i]
-		var src_d: String = chosen_perm[i]
-		direction_colors[dst_d] = old_cols[src_d]
-		story_part_hp[dst_d] = old_hp[src_d]
-		_boss_part_flash[dst_d] = old_flash[src_d]
-		_boss_part_recoil[dst_d] = old_recoil[src_d]
+	if _story_manager != null:
+		_story_manager.reset_story_boss_state(level_num)
 
 
 func _update_story_boss_labels() -> void:
-	var all_parts_dead := _are_all_boss_parts_destroyed()
-	if _story_boss_name_label != null and is_instance_valid(_story_boss_name_label):
-		if story_level == 4:
-			if all_parts_dead:
-				_story_boss_name_label.text = "🎭 PHANTOM MAESTRO — MASK UNVEILED! 🎭"
-				_story_boss_name_label.add_theme_color_override("font_color", Color(1.0, 0.42, 0.48))
-			else:
-				var instr_left: int = _get_alive_boss_parts().size()
-				_story_boss_name_label.text = "🎭 LVL 4: PHANTOM MAESTRO (INSTR: " + str(instr_left) + "/4) 🎭"
-				_story_boss_name_label.add_theme_color_override("font_color", Color(1.0, 0.80, 0.38))
-		elif story_level == 3:
-			if all_parts_dead:
-				_story_boss_name_label.text = "🌀 VOID SERAPH — CORE EXPOSED! 🌀"
-				_story_boss_name_label.add_theme_color_override("font_color", Color(1.0, 0.45, 0.95))
-			else:
-				var wings_left: int = _get_alive_boss_parts().size()
-				_story_boss_name_label.text = "🌀 LVL 3: VOID SERAPH (WINGS: " + str(wings_left) + "/4) 🌀"
-				_story_boss_name_label.add_theme_color_override("font_color", Color(0.92, 0.55, 1.0))
-		elif story_level == 2:
-			if all_parts_dead:
-				_story_boss_name_label.text = "🐍 CYBER HYDRA — HEART EXPOSED! 🐍"
-				_story_boss_name_label.add_theme_color_override("font_color", Color(1.0, 0.35, 0.75))
-			else:
-				var heads_left: int = _get_alive_boss_parts().size()
-				_story_boss_name_label.text = "🐍 LVL 2: CYBER HYDRA (HEADS: " + str(heads_left) + "/4) 🐍"
-				_story_boss_name_label.add_theme_color_override("font_color", Color(0.28, 1.0, 0.75))
-		else:
-			if all_parts_dead:
-				_story_boss_name_label.text = "🔥 CHROMA TITAN — CORE EXPOSED! 🔥"
-				_story_boss_name_label.add_theme_color_override("font_color", Color(1.0, 0.35, 0.45))
-			else:
-				var parts_left: int = _get_alive_boss_parts().size()
-				_story_boss_name_label.text = "⚔ LVL 1: CHROMA TITAN (PARTS: " + str(parts_left) + "/4) ⚔"
-				_story_boss_name_label.add_theme_color_override("font_color", Color(0.45, 0.96, 1.0))
-	if _story_boss_hp_label != null and is_instance_valid(_story_boss_hp_label):
-		if story_level == 4:
-			if _story_l4_mirror_swipes > 0:
-				_story_boss_hp_label.text = "🪞 MIRROR CURSE x" + str(_story_l4_mirror_swipes) + " — SWIPES REVERSED! 🪞"
-				_story_boss_hp_label.add_theme_color_override("font_color", Color(0.78, 0.92, 1.0))
-			elif all_parts_dead:
-				_story_boss_hp_label.text = "🎭 MAIN HP: " + str(maxi(0, story_boss_hp)) + " / " + str(story_boss_max_hp) + " (FIND THE TRUE MASK!) 🎭"
-				_story_boss_hp_label.add_theme_color_override("font_color", Color(1.0, 0.62, 0.55))
-			else:
-				var instr_left_hp: int = _get_alive_boss_parts().size()
-				_story_boss_hp_label.text = "🎵 SHIELDED (" + str(story_boss_hp) + "/" + str(story_boss_max_hp) + ") — SILENCE " + str(instr_left_hp) + " INSTRUMENTS!"
-				_story_boss_hp_label.add_theme_color_override("font_color", Color(1.0, 0.92, 0.78))
-		elif story_level == 3:
-			if all_parts_dead:
-				_story_boss_hp_label.text = "🌀 MAIN HP: " + str(maxi(0, story_boss_hp)) + " / " + str(story_boss_max_hp) + " (3 VOID RIFTS!) 🌀"
-				_story_boss_hp_label.add_theme_color_override("font_color", Color(0.95, 0.62, 1.0))
-			else:
-				var wings_left_hp: int = _get_alive_boss_parts().size()
-				_story_boss_hp_label.text = "🛡️ SHIELDED (" + str(story_boss_hp) + "/" + str(story_boss_max_hp) + ") — SHATTER " + str(wings_left_hp) + " WINGS!"
-				_story_boss_hp_label.add_theme_color_override("font_color", Color(0.95, 0.84, 1.0))
-		elif story_level == 2:
-			if all_parts_dead:
-				_story_boss_hp_label.text = "🐍 MAIN HP: " + str(maxi(0, story_boss_hp)) + " / " + str(story_boss_max_hp) + " (3 SHIELDS!) 🐍"
-				_story_boss_hp_label.add_theme_color_override("font_color", Color(0.35, 1.0, 0.78))
-			else:
-				var heads_left_hp: int = _get_alive_boss_parts().size()
-				_story_boss_hp_label.text = "🛡️ SHIELDED (" + str(story_boss_hp) + "/" + str(story_boss_max_hp) + ") — SEVER " + str(heads_left_hp) + " HEADS!"
-				_story_boss_hp_label.add_theme_color_override("font_color", Color(0.80, 1.0, 0.92))
-		else:
-			if all_parts_dead:
-				_story_boss_hp_label.text = "🔥 MAIN HP: " + str(maxi(0, story_boss_hp)) + " / " + str(story_boss_max_hp) + " (3 BOMBS!) 🔥"
-				_story_boss_hp_label.add_theme_color_override("font_color", Color(1.0, 0.92, 0.35))
-			else:
-				var parts_left_hp: int = _get_alive_boss_parts().size()
-				_story_boss_hp_label.text = "🛡️ SHIELDED (" + str(story_boss_hp) + "/" + str(story_boss_max_hp) + ") — BREAK " + str(parts_left_hp) + " PARTS!"
-				_story_boss_hp_label.add_theme_color_override("font_color", Color(0.82, 0.96, 1.0))
+	if _story_manager != null:
+		_story_manager.update_story_boss_labels()
 
 
 func _start_story_turn() -> void:
-	if state != settings.GameState.PLAYING or story_victory_animating:
-		return
-
-	# Clean up any special arcade states (Note: Board NEVER rotates in Boss Mode!)
-	powerup_square_dir = ""
-	powerup_type = ""
-	is_hold_turn = false
-	is_holding_active = false
-	is_double_turn = false
-	double_turn_step = 0
-	_cleanup_hold_ui()
-	_cleanup_double_turn_ui()
-
-	# Calculate turn time limit (slightly faster when all parts are destroyed & core is exposed)
-	var hp_missing_ratio: float = clampf(1.0 - float(story_boss_hp) / float(maxi(1, story_boss_max_hp)), 0.0, 1.0)
-	var base_limit: float = GameSettings.INITIAL_TIME_LIMIT - hp_missing_ratio * 0.22
-	if story_boss_enraged:
-		base_limit -= 0.08
-	current_time_limit = clampf(base_limit, 0.78, GameSettings.INITIAL_TIME_LIMIT)
-	time_left_in_turn = current_time_limit
-	_turn_start_time = Time.get_ticks_msec() / 1000.0
-
-	# Center square is ALWAYS White in Story Mode
-	set_random_center_color()
-
-	# Level 4 (Phantom Maestro) uses its own Melody / Mirror / Masquerade turn logic
-	if story_level == 4:
-		_start_story_level4_turn()
-		return
-
-	# Spawn 1, 2, or 3 Bombs depending on how many Boss Body Parts are broken!
-	# - 0–1 parts broken: 1 Bomb
-	# - 2–3 parts broken: 2 Bombs
-	# - All 4 parts broken (Phase 2 Enraged): 3 Bombs (only 1 safe square!)
-	# Fairness guarantee: Always keep at least 1 alive body part bomb-free in Phase 1!
-	var all_dirs: Array[String] = ["up", "down", "left", "right"]
-	var alive_parts: Array[String] = _get_alive_boss_parts()
-	var bomb_count: int = _get_story_bomb_count()
-	var prev_bombs: Array[String] = story_bomb_dirs.duplicate()
-
-	story_bomb_dirs.clear()
-	if alive_parts.is_empty():
-		# Phase 2 (All 4 parts broken): 3 Hazards -> 1 Safe Square!
-		var prev_safe: String = _story_last_swiped_dir if (story_level == 3 and _story_last_swiped_dir != "") else ""
-		if prev_safe == "":
-			for d: String in all_dirs:
-				if d not in prev_bombs:
-					prev_safe = d
-					break
-		var safe_candidates: Array[String] = []
-		for d: String in all_dirs:
-			if d != prev_safe:
-				safe_candidates.append(d)
-		var force_move_safe: bool = (story_level == 3) or (randf() < 0.80)
-		var safe_dir: String = safe_candidates.pick_random() if (not safe_candidates.is_empty() and force_move_safe) else all_dirs.pick_random()
-		for d: String in all_dirs:
-			if d != safe_dir:
-				story_bomb_dirs.append(d)
-	else:
-		# Phase 1: Protect 1 alive body part so at least 1 alive part is ALWAYS hazard-free!
-		var candidate_alive: Array[String] = []
-		if story_level == 3 and _story_last_swiped_dir != "":
-			for d: String in alive_parts:
-				if d != _story_last_swiped_dir:
-					candidate_alive.append(d)
-		if candidate_alive.is_empty():
-			candidate_alive = alive_parts.duplicate()
-
-		var protected_dir: String = candidate_alive[0]
-		if candidate_alive.size() > 1:
-			var rotated_alive: Array[String] = []
-			for d: String in candidate_alive:
-				if d in prev_bombs:
-					rotated_alive.append(d)
-			if not rotated_alive.is_empty() and randf() < 0.75:
-				protected_dir = rotated_alive.pick_random()
-			else:
-				protected_dir = candidate_alive.pick_random()
-
-		var allowed_bomb_dirs: Array[String] = []
-		for d: String in all_dirs:
-			if d != protected_dir:
-				allowed_bomb_dirs.append(d)
-		allowed_bomb_dirs.shuffle()
-
-		var ordered_pool: Array[String] = []
-		if story_level == 3 and _story_last_swiped_dir != "" and _story_last_swiped_dir != protected_dir:
-			ordered_pool.append(_story_last_swiped_dir)
-			for d: String in allowed_bomb_dirs:
-				if d != _story_last_swiped_dir:
-					ordered_pool.append(d)
-		else:
-			var fresh_dirs: Array[String] = []
-			var repeat_dirs: Array[String] = []
-			for d: String in allowed_bomb_dirs:
-				if d not in prev_bombs:
-					fresh_dirs.append(d)
-				else:
-					repeat_dirs.append(d)
-			if randf() < 0.78:
-				ordered_pool.append_array(fresh_dirs)
-				ordered_pool.append_array(repeat_dirs)
-			else:
-				ordered_pool.append_array(allowed_bomb_dirs)
-
-		for i in range(mini(bomb_count, ordered_pool.size())):
-			story_bomb_dirs.append(ordered_pool[i])
-
-	story_bomb_dir = story_bomb_dirs[0] if not story_bomb_dirs.is_empty() else ""
-	_boss_throw_target_dirs = story_bomb_dirs.duplicate()
-	_boss_throw_target_dir = story_bomb_dir
-	_boss_throw_anim = 1.0
-
-	_apply_board_colors()
-	_pulse_center()
+	if _story_manager != null:
+		_story_manager.start_story_turn()
 
 
 func _on_story_swipe(direction: String) -> void:
-	if state != settings.GameState.PLAYING or story_victory_animating:
-		return
-
-	_clear_persistent_labels()
-	_squash_stretch_center(direction)
-	total_swipes += 1
-
-	if story_level == 4:
-		_on_story_level4_swipe(direction)
-		return
-
-	# Check if player swiped onto any square with a Boss Hazard!
-	if direction in story_bomb_dirs or (story_bomb_dir != "" and direction == story_bomb_dir):
-		_on_story_bomb_hit(direction)
-		return
-
-	# Safe swipe!
-	# 1. All active Hazards disappear immediately after a correct swipe!
-	if not story_bomb_dirs.is_empty():
-		for b_dir: String in story_bomb_dirs:
-			var old_bomb_pos := _get_board_center(b_dir)
-			_burst_particles(old_bomb_pos, Color(0.75, 0.85, 1.0, 0.7), 4)
-		story_bomb_dirs.clear()
-	story_bomb_dir = ""
-
-	# 2. Match swiped color with Boss body part & drain HP!
-	_on_story_boss_hit(direction)
-
-
-func _on_story_bomb_hit(bomb_dir: String) -> void:
-	var bomb_pos := _get_board_center(bomb_dir)
-	story_bomb_dirs.clear()
-	story_bomb_dir = ""
-	_boss_taunt_anim = 1.0
-	_story_last_swiped_dir = bomb_dir
-
-	if story_level == 3:
-		# Level 3 (Void Seraph): Void Singularity pull & Dimensional Color Warp!
-		_flash_square(bomb_dir, Color(1.55, 0.35, 1.95, 0.98))
-		_burst_particles(bomb_pos, Color(1.35, 0.28, 1.85), 26)
-		_burst_particles(bomb_pos, Color(1.0, 0.90, 0.35), 14)
-		_burst_at(bomb_pos, Color(1.25, 0.25, 1.75))
-		_warp_story_level3_colors(bomb_dir)
-		_update_story_boss_labels()
-	elif story_level == 2:
-		# Level 2 (Cyber Hydra): Reflective Shield Counter-Shock & Boss Drain-Heal!
-		_flash_square(bomb_dir, Color(0.25, 1.8, 1.1, 0.98))
-		_burst_particles(bomb_pos, Color(0.2, 1.5, 0.95), 24)
-		_burst_particles(bomb_pos, Color(0.95, 0.35, 1.6), 14)
-		_burst_at(bomb_pos, Color(0.2, 1.4, 0.85))
-
-		# Cyber Hydra absorbs the reflected energy to heal itself!
-		if _are_all_boss_parts_destroyed():
-			story_boss_hp = mini(story_boss_max_hp, story_boss_hp + 2)
-		else:
-			var cur_h: int = int(story_part_hp.get(bomb_dir, 0))
-			if cur_h > 0 and cur_h < story_part_max_hp:
-				story_part_hp[bomb_dir] = mini(story_part_max_hp, cur_h + 1)
-			else:
-				for d_heal: String in ["up", "down", "left", "right"]:
-					var dh_val: int = int(story_part_hp.get(d_heal, 0))
-					if dh_val > 0 and dh_val < story_part_max_hp:
-						story_part_hp[d_heal] = mini(story_part_max_hp, dh_val + 1)
-						break
-		_update_story_boss_labels()
-	else:
-		# Level 1 (Chroma Titan): Fiery bomb explosion visuals on the bombed square
-		_flash_square(bomb_dir, Color(1.8, 0.25, 0.2, 0.98))
-		_burst_particles(bomb_pos, Color(1.5, 0.35, 0.15), 24)
-		_burst_particles(bomb_pos, Color(1.0, 0.85, 0.2), 14)
-		_burst_at(bomb_pos, Color(1.4, 0.25, 0.2))
-
-	lives -= 1
-	_lost_heart_this_game = true
-	streak = 0
-	perfect_streak = 0
-	_audio_pulse = 0.9
-
-	sfx.play("wrong")
-	_haptic_danger()
-	_shake_screen(14.0)
-	_flash_center_red()
-	if story_level == 3:
-		_show_persistent_label("🌀 VOID RIFT! -1 HP (COLORS WARPED)", bomb_pos, Color(0.95, 0.55, 1.0), true)
-	elif story_level == 2:
-		_show_persistent_label("🛡️ REFLECT! -1 HP (BOSS HEALED)", bomb_pos, Color(0.28, 1.0, 0.82), true)
-	else:
-		_show_persistent_label("💥 BOMB! -1 HP", bomb_pos, Color(1.0, 0.3, 0.32), true)
-	_update_lives_display()
-	_apply_board_colors()
-
-	if lives <= 0:
-		_game_over()
-	else:
-		start_new_turn()
-
-
-func _on_story_boss_hit(direction: String, dmg: int = 1) -> void:
-	dmg = maxi(1, dmg)
-	var encore_prefix: String = "🎵 ENCORE! " if dmg > 1 else ""
-	_story_last_swiped_dir = direction
-	var reaction_time: float = (Time.get_ticks_msec() / 1000.0) - _turn_start_time
-	if reaction_time > 0.03 and reaction_time < fastest_reaction_this_game:
-		fastest_reaction_this_game = reaction_time
-	if (current_time_limit - time_left_in_turn) <= 0.40:
-		_fast_swipes_this_game += 1
-
-	streak += 1
-	if streak > best_streak_this_game:
-		best_streak_this_game = streak
-	total_correct += 1
-
-	var mult := _current_combo_multiplier()
-	var hit_col: Color = direction_colors.get(direction, Color(0.3, 0.95, 1.0))
-	var sq_center := _get_board_center(direction)
-	var all_parts_already_dead := _are_all_boss_parts_destroyed()
-	var target_dir: String = "core" if all_parts_already_dead else direction
-	var boss_part_pos := _get_boss_part_screen_pos(target_dir)
-	var canvas_top: float = _story_boss_canvas.offset_top if (_story_boss_canvas != null and is_instance_valid(_story_boss_canvas)) else 74.0
-	var canvas_local_pos := boss_part_pos - Vector2(0.0, canvas_top)
-
-	# Spawn colored laser beam from the swiped square to the Boss target!
-	_boss_laser_beams.append({
-		"from": sq_center,
-		"to": boss_part_pos,
-		"color": hit_col,
-		"age": 0.0,
-		"duration": 0.28,
-	})
-
-	var part_names := {
-		"up": "BELL" if story_level == 4 else ("TOP WING" if story_level == 3 else ("TOP FANG" if story_level == 2 else "HEAD")),
-		"down": "DRUM" if story_level == 4 else ("SOLAR HALO" if story_level == 3 else ("LOW FANG" if story_level == 2 else "ARMOR")),
-		"left": "HARP" if story_level == 4 else ("LEFT WING" if story_level == 3 else ("LEFT FANG" if story_level == 2 else "CLAW")),
-		"right": "HORN" if story_level == 4 else ("RIGHT WING" if story_level == 3 else ("RIGHT FANG" if story_level == 2 else "CANNON")),
-	}
-	var p_name: String = str(part_names.get(direction, "PART"))
-	var streak_pitch: float = 1.0 + float(streak % 14) * 0.024
-
-	# =========================================================
-	# PHASE 1: DESTROY ALL 4 BODY PARTS FIRST (MAIN HP SHIELDED)
-	# =========================================================
-	if not all_parts_already_dead:
-		var cur_part_hp: int = int(story_part_hp.get(direction, 0))
-		if cur_part_hp > 0:
-			cur_part_hp = maxi(0, cur_part_hp - dmg)
-			story_part_hp[direction] = cur_part_hp
-			var part_destroyed_now: bool = (cur_part_hp <= 0)
-
-			_boss_part_flash[direction] = 1.0
-			_boss_part_recoil[direction] = 1.0
-			_boss_hit_shake = 1.0 if part_destroyed_now else 0.65
-			_audio_pulse = minf(1.0, _audio_pulse + (0.95 if part_destroyed_now else 0.70))
-			score += (350 if part_destroyed_now else 150) * mult
-
-			_flash_square(direction, Color(1.0, 1.0, 1.0, 0.8))
-			_burst_particles(sq_center, hit_col, 8)
-			_burst_particles(boss_part_pos, hit_col.lightened(0.25), 24 if part_destroyed_now else 11)
-			_burst_at(boss_part_pos, hit_col)
-
-			if part_destroyed_now:
-				_spawn_boss_canvas_explosion(canvas_local_pos, hit_col, 0.95)
-				sfx.play_pitched("unlock", 1.12)
-				_haptic_frenzy()
-				_shake_screen(11.0)
-				var verb_broken := "SILENCED" if story_level == 4 else ("SHATTERED" if story_level == 3 else ("SEVERED" if story_level == 2 else "BROKEN"))
-				if _are_all_boss_parts_destroyed():
-					story_boss_enraged = true
-					sfx.play_voice("overdrive", 88, 1.2)
-					if story_level == 4:
-						_story_l4_sequence.clear()
-						_story_l4_seq_index = 0
-						_show_remap_banner("🎭 MASK UNVEILED: FIND THE TRUE MASK! 🎭")
-					elif story_level == 3:
-						_show_remap_banner("🌀 CORE EXPOSED: 3 VOID RIFTS! 🌀")
-					elif story_level == 2:
-						_show_remap_banner("🐍 HEART EXPOSED: 3 SHIELDS! 🐍")
-					else:
-						_show_remap_banner("🔥 CORE EXPOSED: 3 BOMBS! 🔥")
-					_show_persistent_label("💥 " + p_name + " " + verb_broken + "!", sq_center, Color(1.0, 0.92, 0.25), true)
-				else:
-					var rem_parts: int = _get_alive_boss_parts().size()
-					if story_level == 4 and rem_parts == 3:
-						_show_remap_banner("🪞 MIRROR CURSE AWAKENS! 🪞")
-					elif rem_parts == 2:
-						if story_level == 4:
-							_show_remap_banner("⚠️ MAESTRO ENRAGED: 3-NOTE MELODIES! ⚠️")
-						elif story_level == 3:
-							_show_remap_banner("⚠️ SERAPH ENRAGED: 2 VOID RIFTS! ⚠️")
-						elif story_level == 2:
-							_show_remap_banner("⚠️ HYDRA ENRAGED: 2 SHIELDS! ⚠️")
-						else:
-							_show_remap_banner("⚠️ BOSS ENRAGED: 2 BOMBS! ⚠️")
-					_show_persistent_label("💥 " + p_name + " " + verb_broken + "! (" + str(rem_parts) + " LEFT)", sq_center, Color(1.0, 0.92, 0.25), true)
-			else:
-				sfx.play_pitched("correct", streak_pitch)
-				_haptic_correct()
-				_shake_screen(4.5)
-				_show_persistent_label(encore_prefix + p_name + " -" + str(dmg) + " (" + str(cur_part_hp) + "/" + str(story_part_max_hp) + ")", sq_center, hit_col.lightened(0.2), dmg > 1)
-		else:
-			# Swiped a color whose body part is already destroyed while other parts remain alive!
-			if story_level == 4:
-				# Level 4 (Phantom Maestro): Silenced instrument notes still count toward the melody
-				_boss_part_flash[direction] = 0.35
-				sfx.play_pitched("correct", streak_pitch * 0.92)
-				_haptic_correct()
-				_flash_square(direction, Color(1.0, 0.88, 0.55, 0.6))
-				_burst_particles(sq_center, Color(1.0, 0.85, 0.45), 6)
-				_show_persistent_label("🎵 NOTE " + str(_story_l4_seq_index) + " ✓", sq_center, Color(1.0, 0.90, 0.55), false)
-			elif story_level == 3:
-				# Level 3 (Void Seraph): Swiping a shattered wing channels VOID DRAIN (+2 Main HP to Core)!
-				story_boss_hp = mini(story_boss_max_hp + 6, story_boss_hp + 2)
-				story_boss_ghost_hp = float(story_boss_hp)
-				_boss_part_flash["down"] = 1.0
-				_boss_taunt_anim = 0.85
-				sfx.play_pitched("wrong", 1.18)
-				_haptic_wrong()
-				_shake_screen(8.0)
-				_flash_square(direction, Color(1.45, 0.35, 1.85, 0.85))
-				_burst_particles(boss_part_pos, Color(1.35, 0.35, 1.85), 16)
-				_show_persistent_label("🌀 VOID DRAIN! CORE +2 HP!", sq_center, Color(0.95, 0.55, 1.0), true)
-			elif story_level == 2:
-				# Level 2 (Cyber Hydra): Swiping a severed head triggers HYDRA REGROWTH (+2 HP)!
-				story_part_hp[direction] = 2
-				_boss_part_flash[direction] = 1.0
-				_boss_part_recoil[direction] = -0.8
-				_boss_taunt_anim = 0.85
-				sfx.play_pitched("wrong", 1.15)
-				_haptic_wrong()
-				_shake_screen(8.0)
-				_flash_square(direction, Color(0.25, 1.6, 0.75, 0.85))
-				_burst_particles(boss_part_pos, Color(0.25, 1.5, 0.75), 16)
-				_show_persistent_label("🐍 HEAD REGROWN! (2/" + str(story_part_max_hp) + ")", sq_center, Color(0.30, 1.0, 0.68), true)
-			else:
-				_boss_part_flash[direction] = 0.45
-				_boss_part_recoil[direction] = 0.35
-				sfx.play_pitched("tap", 0.95)
-				_haptic_tap()
-				_flash_square(direction, Color(0.7, 0.75, 0.85, 0.5))
-				_burst_particles(boss_part_pos, Color(0.6, 0.65, 0.75), 5)
-				_show_persistent_label("⚡ HIT ACTIVE PARTS!", sq_center, Color(0.85, 0.90, 1.0), false)
-
-		if story_level == 3:
-			_warp_story_level3_colors(direction)
-		_update_story_boss_labels()
-		_apply_board_colors()
-		start_new_turn()
-		return
-
-	# =========================================================
-	# PHASE 2: ALL 4 BODY PARTS DESTROYED -> DRAIN MAIN BOSS HP!
-	# =========================================================
-	story_boss_hp = maxi(0, story_boss_hp - dmg)
-	_boss_part_flash["down"] = 1.0
-	_boss_part_flash[direction] = 0.85
-	_boss_part_recoil["down"] = 1.0
-	_boss_part_recoil[direction] = 0.65
-	_boss_hit_shake = 0.85
-	_audio_pulse = minf(1.0, _audio_pulse + 0.82)
-	score += 220 * mult
-
-	sfx.play_pitched("correct", streak_pitch + 0.08)
-	if streak % 5 == 0:
-		sfx.play_pitched("combo", 1.10)
-		_haptic_combo()
-	else:
-		_haptic_correct()
-	_shake_screen(6.5)
-
-	_flash_square(direction, Color(1.0, 1.0, 1.0, 0.85))
-	_burst_particles(sq_center, hit_col, 10)
-	_burst_particles(boss_part_pos, hit_col.lightened(0.3), 16)
-	_burst_at(boss_part_pos, hit_col)
-	_spawn_boss_canvas_explosion(canvas_local_pos, hit_col, 0.45)
-
-	_show_persistent_label(encore_prefix + "🔥 HP -" + str(dmg) + " (" + str(story_boss_hp) + "/" + str(story_boss_max_hp) + ")", sq_center, Color(1.0, 0.88, 0.28), false)
-
-	if story_level == 3 and story_boss_hp > 0:
-		_warp_story_level3_colors(direction)
-	_update_story_boss_labels()
-	_apply_board_colors()
-
-	# Check if Boss is defeated!
-	if story_boss_hp <= 0:
-		_trigger_story_boss_victory()
-		return
-
-	start_new_turn()
-
-
-func _spawn_boss_canvas_explosion(pos: Vector2, col: Color, intensity: float = 1.0) -> void:
-	_boss_explosion_rings.append({
-		"pos": pos,
-		"color": col,
-		"age": 0.0,
-		"duration": 0.48 * clampf(intensity, 0.6, 1.5),
-		"max_radius": 92.0 * intensity,
-	})
-	var shard_count: int = maxi(6, int(round(18.0 * intensity)))
-	for i in range(shard_count):
-		var ang: float = randf() * TAU
-		var spd: float = randf_range(75.0, 290.0) * clampf(intensity, 0.65, 1.45)
-		var shard_col: Color = col
-		var r_pick: float = randf()
-		if r_pick < 0.28:
-			shard_col = Color(1.0, 0.92, 0.28)
-		elif r_pick < 0.52:
-			shard_col = Color(1.6, 0.42, 0.15)
-		elif r_pick < 0.70:
-			shard_col = Color(1.4, 1.4, 1.5)
-		_boss_explosion_shrapnel.append({
-			"pos": pos + Vector2(randf_range(-10.0, 10.0), randf_range(-10.0, 10.0)),
-			"vel": Vector2(cos(ang), sin(ang)) * spd,
-			"rot": randf() * TAU,
-			"rot_speed": randf_range(-14.0, 14.0),
-			"size": randf_range(5.0, 14.0) * clampf(intensity, 0.75, 1.35),
-			"color": shard_col,
-			"age": 0.0,
-			"duration": randf_range(0.45, 0.95),
-		})
-
-
-func _trigger_story_boss_victory() -> void:
-	story_victory_animating = true
-	story_level_won = true
-	story_bomb_dir = ""
-	story_bomb_dirs.clear()
-	_boss_throw_target_dirs.clear()
-	_center_scale_locked = true
-	if center_square != null:
-		center_square.scale = Vector2.ONE
-	_apply_board_colors()
-
-	# Award Neon Sparks for defeating the Boss (Lv 1: +50/+15, Lv 2: +75/+25, Lv 3: +100/+40)
-	var first_clear: bool = false
-	if settings != null and not _tamper_flagged:
-		first_clear = settings.complete_story_level(story_level)
-		var spark_reward: int = 50 if first_clear else 15
-		if story_level == 4:
-			spark_reward = 150 if first_clear else 60
-		elif story_level == 3:
-			spark_reward = 100 if first_clear else 40
-		elif story_level == 2:
-			spark_reward = 75 if first_clear else 25
-		settings.add_sparks(spark_reward)
-		sparks_collected_in_run += spark_reward
-		score += 6500 if story_level == 4 else (5000 if story_level == 3 else (3500 if story_level == 2 else 2500))
-		_update_sparks_displays()
-
-	sfx.play("unlock")
-	sfx.play_voice("legendary", 98, 0.5)
-	_haptic_celebration()
-	_shake_screen(18.0)
-	if story_level == 4:
-		_show_remap_banner("💥 MAESTRO SILENCED! 💥")
-	elif story_level == 3:
-		_show_remap_banner("💥 SERAPH OBLITERATED! 💥")
-	elif story_level == 2:
-		_show_remap_banner("💥 HYDRA OBLITERATED! 💥")
-	else:
-		_show_remap_banner("💥 BOSS OBLITERATED! 💥")
-
-	var canvas_top: float = _story_boss_canvas.offset_top if (_story_boss_canvas != null and is_instance_valid(_story_boss_canvas)) else 74.0
-	var boss_center_screen := _get_boss_part_screen_pos("down")
-	_spawn_boss_canvas_explosion(boss_center_screen - Vector2(0.0, canvas_top), Color(1.0, 0.85, 0.25), 1.45)
-
-	# Multi-explosion Boss Destruction Sequence over 1.65 seconds
-	var dirs := ["up", "left", "right", "down"]
-	var death_tw := create_tween()
-	death_tw.tween_property(self, "_boss_death_progress", 1.0, 1.50)
-
-	for i in range(10):
-		var delay_t: float = float(i) * 0.13
-		get_tree().create_timer(delay_t).timeout.connect(func():
-			if not is_inside_tree():
-				return
-			var d_key: String = dirs[i % dirs.size()]
-			var p_pos := _get_boss_part_screen_pos(d_key) + Vector2(randf_range(-34.0, 34.0), randf_range(-26.0, 26.0))
-			var exp_col: Color = direction_colors.get(d_key, Color(1.0, 0.85, 0.2))
-			_boss_part_flash[d_key] = 1.0
-			_boss_hit_shake = 1.0
-			_spawn_boss_canvas_explosion(p_pos - Vector2(0.0, canvas_top), exp_col, 1.15 if i < 8 else 1.75)
-			_burst_particles(p_pos, exp_col, 24)
-			_burst_particles(p_pos, Color(1.0, 0.95, 0.4), 16)
-			_shake_screen(12.0 if i < 8 else 20.0)
-			if i % 2 == 0:
-				sfx.play_pitched("combo", 0.88 + float(i) * 0.08)
-				_haptic_tap()
-		)
-
-	get_tree().create_timer(1.65).timeout.connect(func():
-		if not is_inside_tree():
-			return
-		story_victory_animating = false
-		if first_clear:
-			if story_level == 4:
-				_queue_achievement_toast({
-					"header": "STORY LEVEL 4 CLEARED!  +150 SPARKS",
-					"name": "PHANTOM MAESTRO SLAYER",
-					"desc": "Silenced the Phantom Maestro in Story Mode!",
-					"icon": "crown",
-					"color": Color(1.0, 0.72, 0.32),
-				})
-			elif story_level == 3:
-				_queue_achievement_toast({
-					"header": "STORY LEVEL 3 CLEARED!  +100 SPARKS",
-					"name": "VOID SERAPH SLAYER",
-					"desc": "Defeated Void Seraph in Story Mode!",
-					"icon": "crown",
-					"color": Color(0.92, 0.48, 1.0),
-				})
-			elif story_level == 2:
-				_queue_achievement_toast({
-					"header": "STORY LEVEL 2 CLEARED!  +75 SPARKS",
-					"name": "CYBER HYDRA SLAYER",
-					"desc": "Defeated Cyber Hydra in Story Mode!",
-					"icon": "crown",
-					"color": Color(0.20, 1.0, 0.68),
-				})
-			else:
-				_queue_achievement_toast({
-					"header": "STORY LEVEL 1 CLEARED!  +50 SPARKS",
-					"name": "CHROMA TITAN SLAYER",
-					"desc": "Defeated Chroma Titan in Story Mode!",
-					"icon": "crown",
-					"color": Color(0.35, 0.95, 1.0),
-				})
-		_game_over()
-	)
-
-
-func _get_boss_part_screen_pos(direction: String) -> Vector2:
-	var canvas_top: float = 74.0
-	var canvas_h: float = 344.0
-	if _story_boss_canvas != null and is_instance_valid(_story_boss_canvas):
-		canvas_top = _story_boss_canvas.offset_top
-		canvas_h = maxf(240.0, _story_boss_canvas.offset_bottom - _story_boss_canvas.offset_top)
-	var boss_origin := Vector2(270.0, canvas_top + canvas_h * 0.60)
-	if story_level == 4:
-		match direction:
-			"up":
-				return boss_origin + Vector2(0.0, -90.0)
-			"down":
-				return boss_origin + Vector2(0.0, 58.0)
-			"left":
-				return boss_origin + Vector2(-112.0, -4.0)
-			"right":
-				return boss_origin + Vector2(112.0, -4.0)
-			"core":
-				return boss_origin + Vector2(0.0, -30.0)
-		return boss_origin
-	match direction:
-		"up":
-			return boss_origin + Vector2(0.0, -72.0)
-		"down", "core":
-			return boss_origin + Vector2(0.0, 12.0)
-		"left":
-			return boss_origin + Vector2(-112.0, -4.0)
-		"right":
-			return boss_origin + Vector2(112.0, -4.0)
-	return boss_origin
+	if _story_manager != null:
+		_story_manager.on_story_swipe(direction)
 
 
 func _process_story_boss_visuals(delta: float) -> void:
-	_boss_anim_time += delta
-
-	# Keep Level Select mini boss previews animated when Story Screen is open
-	if _story_screen != null and _story_screen.visible:
-		if _story_level1_preview_ctrl != null and is_instance_valid(_story_level1_preview_ctrl):
-			_story_level1_preview_ctrl.queue_redraw()
-		if _story_level2_preview_ctrl != null and is_instance_valid(_story_level2_preview_ctrl):
-			_story_level2_preview_ctrl.queue_redraw()
-		if _story_level3_preview_ctrl != null and is_instance_valid(_story_level3_preview_ctrl):
-			_story_level3_preview_ctrl.queue_redraw()
-		if _story_level4_preview_ctrl != null and is_instance_valid(_story_level4_preview_ctrl):
-			_story_level4_preview_ctrl.queue_redraw()
-
-	if not is_story_mode:
-		return
-
-	# Level 4 Masquerade: once the brief True Mask reveal ends, hide all squares behind identical masks
-	if story_level == 4 and _story_l4_reveal_left > 0.0:
-		_story_l4_reveal_left = maxf(0.0, _story_l4_reveal_left - delta)
-		if _story_l4_reveal_left <= 0.0:
-			_apply_board_colors()
-
-	# Smoothly decay boss animation impulses & trailing ghost HP bar
-	story_boss_ghost_hp = move_toward(story_boss_ghost_hp, float(story_boss_hp), delta * 12.0)
-	_boss_hit_shake = maxf(0.0, _boss_hit_shake - delta * 4.5)
-	_boss_taunt_anim = maxf(0.0, _boss_taunt_anim - delta * 2.5)
-	_boss_throw_anim = maxf(0.0, _boss_throw_anim - delta * 3.4)
-
-	for d: String in ["up", "down", "left", "right"]:
-		_boss_part_flash[d] = maxf(0.0, float(_boss_part_flash.get(d, 0.0)) - delta * 5.0)
-		_boss_part_recoil[d] = maxf(0.0, float(_boss_part_recoil.get(d, 0.0)) - delta * 4.2)
-
-	# Update active laser beams
-	var idx: int = _boss_laser_beams.size() - 1
-	while idx >= 0:
-		var beam: Dictionary = _boss_laser_beams[idx]
-		var next_age: float = float(beam.get("age", 0.0)) + delta
-		var dur: float = float(beam.get("duration", 0.28))
-		if next_age >= dur:
-			_boss_laser_beams.remove_at(idx)
-		else:
-			beam["age"] = next_age
-			_boss_laser_beams[idx] = beam
-		idx -= 1
-
-	# Update active explosion shockwave rings
-	var r_idx: int = _boss_explosion_rings.size() - 1
-	while r_idx >= 0:
-		var ring: Dictionary = _boss_explosion_rings[r_idx]
-		var next_age: float = float(ring.get("age", 0.0)) + delta
-		var dur: float = float(ring.get("duration", 0.45))
-		if next_age >= dur:
-			_boss_explosion_rings.remove_at(r_idx)
-		else:
-			ring["age"] = next_age
-			_boss_explosion_rings[r_idx] = ring
-		r_idx -= 1
-
-	# Update active explosion shrapnel shards
-	var s_idx: int = _boss_explosion_shrapnel.size() - 1
-	while s_idx >= 0:
-		var shard: Dictionary = _boss_explosion_shrapnel[s_idx]
-		var next_age: float = float(shard.get("age", 0.0)) + delta
-		var dur: float = float(shard.get("duration", 0.7))
-		if next_age >= dur:
-			_boss_explosion_shrapnel.remove_at(s_idx)
-		else:
-			shard["age"] = next_age
-			var vel: Vector2 = shard.get("vel", Vector2.ZERO)
-			vel.y += 280.0 * delta
-			shard["vel"] = vel
-			shard["pos"] = (shard.get("pos", Vector2.ZERO) as Vector2) + vel * delta
-			shard["rot"] = float(shard.get("rot", 0.0)) + float(shard.get("rot_speed", 0.0)) * delta
-			_boss_explosion_shrapnel[s_idx] = shard
-		s_idx -= 1
-
-	if _story_boss_canvas != null and is_instance_valid(_story_boss_canvas):
-		_story_boss_canvas.queue_redraw()
-
-
-func _draw_story_boss_arena() -> void:
-	if _story_boss_canvas == null or not is_instance_valid(_story_boss_canvas):
-		return
-
-	var c_size: Vector2 = _story_boss_canvas.size
-	if c_size.x <= 1.0 or c_size.y <= 1.0:
-		c_size = Vector2(540.0, 344.0)
-	var canvas_offset := Vector2(0.0, _story_boss_canvas.offset_top)
-	var all_parts_dead := _are_all_boss_parts_destroyed()
-
-	# ---------------------------------------------------------
-	# 1. BOSS MAIN HP BAR (Shielded until all 4 Body Parts are destroyed!)
-	# ---------------------------------------------------------
-	var bar_w: float = 420.0
-	var bar_h: float = 20.0
-	var bar_x: float = (c_size.x - bar_w) * 0.5
-	var bar_y: float = 4.0
-	var bar_rect := Rect2(bar_x, bar_y, bar_w, bar_h)
-
-	# Outer neon frame glow
-	var frame_col := Color(1.0, 0.25, 0.40, 0.95) if all_parts_dead else Color(0.30, 0.92, 1.0, 0.92)
-	_story_boss_canvas.draw_rect(Rect2(bar_x - 3.0, bar_y - 3.0, bar_w + 6.0, bar_h + 6.0), Color(frame_col.r, frame_col.g, frame_col.b, 0.28), false, 4.0)
-	_story_boss_canvas.draw_rect(bar_rect, Color(0.06, 0.04, 0.14, 0.92), true)
-
-	# Ghost trailing damage bar
-	var ghost_ratio: float = clampf(story_boss_ghost_hp / float(maxi(1, story_boss_max_hp)), 0.0, 1.0)
-	if ghost_ratio > 0.0:
-		_story_boss_canvas.draw_rect(Rect2(bar_x + 2.0, bar_y + 2.0, (bar_w - 4.0) * ghost_ratio, bar_h - 4.0), Color(1.0, 0.92, 0.45, 0.85), true)
-
-	# Active Boss HP fill bar
-	var hp_ratio: float = clampf(float(story_boss_hp) / float(maxi(1, story_boss_max_hp)), 0.0, 1.0)
-	if hp_ratio > 0.0:
-		var hp_col := Color(1.0, 0.22, 0.35) if all_parts_dead else Color(0.22, 0.58, 0.88)
-		var fill_w: float = (bar_w - 4.0) * hp_ratio
-		_story_boss_canvas.draw_rect(Rect2(bar_x + 2.0, bar_y + 2.0, fill_w, bar_h - 4.0), hp_col, true)
-		# Glossy top highlight strip
-		_story_boss_canvas.draw_rect(Rect2(bar_x + 2.0, bar_y + 2.0, fill_w, (bar_h - 4.0) * 0.38), Color(1.0, 1.0, 1.0, 0.28), true)
-
-	# Translucent cyan shield stripes across Main HP Bar while any body part is still alive
-	if not all_parts_dead:
-		var stripe_step: float = 28.0
-		var x_cur: float = bar_x + 8.0
-		while x_cur < bar_x + bar_w - 8.0:
-			_story_boss_canvas.draw_line(
-				Vector2(x_cur, bar_y + bar_h - 2.0),
-				Vector2(minf(bar_x + bar_w - 2.0, x_cur + 12.0), bar_y + 2.0),
-				Color(0.55, 0.98, 1.0, 0.32),
-				2.0
-			)
-			x_cur += stripe_step
-
-	_story_boss_canvas.draw_rect(bar_rect, frame_col, false, 2.2)
-
-	# ---------------------------------------------------------
-	# 2. COLOR-MATCHED BODY PART HP BARS UNDER MAIN HP BAR
-	# ---------------------------------------------------------
-	var part_order := ["left", "up", "down", "right"]
-	var pip_w: float = 92.0
-	var pip_gap: float = 14.0
-	var total_pips_w: float = pip_w * 4.0 + pip_gap * 3.0
-	var pip_start_x: float = (c_size.x - total_pips_w) * 0.5
-	var pip_y: float = bar_y + bar_h + 7.0
-	for i in range(4):
-		var p_dir: String = part_order[i]
-		var p_col: Color = direction_colors.get(p_dir, Color.WHITE)
-		var px: float = pip_start_x + float(i) * (pip_w + pip_gap)
-		var p_hp: int = int(story_part_hp.get(p_dir, 0))
-		var p_ratio: float = clampf(float(p_hp) / float(maxi(1, story_part_max_hp)), 0.0, 1.0)
-		var pip_rect := Rect2(px, pip_y, pip_w, 9.0)
-		_story_boss_canvas.draw_rect(pip_rect, Color(0.06, 0.04, 0.14, 0.90), true)
-		if p_ratio > 0.0:
-			_story_boss_canvas.draw_rect(Rect2(px + 1.0, pip_y + 1.0, (pip_w - 2.0) * p_ratio, 7.0), p_col, true)
-			_story_boss_canvas.draw_rect(pip_rect, Color(p_col.r, p_col.g, p_col.b, 0.92), false, 1.6)
-		else:
-			# Destroyed part indicator
-			_story_boss_canvas.draw_rect(pip_rect, Color(0.35, 0.25, 0.35, 0.55), false, 1.2)
-			_story_boss_canvas.draw_line(Vector2(px + 4.0, pip_y + 2.0), Vector2(px + pip_w - 4.0, pip_y + 7.0), Color(1.0, 0.25, 0.3, 0.75), 1.6)
-			_story_boss_canvas.draw_line(Vector2(px + pip_w - 4.0, pip_y + 2.0), Vector2(px + 4.0, pip_y + 7.0), Color(1.0, 0.25, 0.3, 0.75), 1.6)
-
-	# ---------------------------------------------------------
-	# 3. ARTICULATED 4-PART BOSS ("CHROMA TITAN", "CYBER HYDRA", or "VOID SERAPH")
-	# ---------------------------------------------------------
-	var boss_center := Vector2(c_size.x * 0.5, c_size.y * 0.60)
-	if story_level == 4:
-		_draw_phantom_maestro_figure(_story_boss_canvas, boss_center, 1.0, false)
-	elif story_level == 3:
-		_draw_void_seraph_figure(_story_boss_canvas, boss_center, 1.0, false)
-	elif story_level == 2:
-		_draw_cyber_hydra_figure(_story_boss_canvas, boss_center, 1.0, false)
-	else:
-		_draw_chroma_titan_figure(_story_boss_canvas, boss_center, 1.0, false)
-
-	# ---------------------------------------------------------
-	# 4. BOSS HAZARD PROJECTIONS (Lv 1: Bomb Arcs | Lv 2: Shield Tethers | Lv 3: Void Rift Streams)
-	# ---------------------------------------------------------
-	if story_level == 4:
-		# Conductor's baton launches a glowing music note toward the NEXT note of the melody (Phase 1 only —
-		# Phase 2 never reveals the True Mask through projections!)
-		if not all_parts_dead and _boss_throw_anim > 0.01 and _story_l4_seq_index < _story_l4_sequence.size():
-			var n_dir: String = _story_l4_sequence[_story_l4_seq_index]
-			var n_start: Vector2 = boss_center + Vector2(46.0, -40.0)
-			var n_end: Vector2 = _get_board_center(n_dir) - canvas_offset
-			var n_t: float = 1.0 - _boss_throw_anim
-			var n_pt: Vector2 = n_start.lerp(n_end, n_t) + Vector2(0.0, -sin(n_t * PI) * 46.0)
-			_story_boss_canvas.draw_circle(n_pt, 13.0, Color(1.0, 0.78, 0.30, 0.40))
-			_draw_story_music_note(_story_boss_canvas, n_pt, 1.0, Color(1.0, 0.92, 0.55, 0.98))
-	elif story_level == 3:
-		var start_p: Vector2 = boss_center + Vector2(0.0, -4.0)
-		var pulse_a: float = 0.28 + 0.15 * sin(_boss_anim_time * 10.5)
-		for v_dir: String in story_bomb_dirs:
-			if v_dir == "":
-				continue
-			var end_p: Vector2 = _get_board_center(v_dir) - canvas_offset
-			_story_boss_canvas.draw_line(start_p, end_p, Color(0.85, 0.25, 1.0, pulse_a), 5.5, true)
-			_story_boss_canvas.draw_line(start_p, end_p, Color(1.0, 0.85, 0.35, pulse_a * 1.25), 1.8, true)
-			if _boss_throw_anim > 0.01:
-				var proj_t: float = 1.0 - _boss_throw_anim
-				var pulse_pt: Vector2 = start_p.lerp(end_p, proj_t)
-				_story_boss_canvas.draw_circle(pulse_pt, 12.5, Color(0.92, 0.32, 1.0, 0.58))
-				_story_boss_canvas.draw_arc(pulse_pt, 9.0, _boss_anim_time * 6.0, _boss_anim_time * 6.0 + PI * 1.5, 14, Color(1.0, 0.92, 0.38, 0.96), 2.5, true)
-	elif story_level == 2:
-		# Persistent emerald-cyan shield projection beams from Cyber Hydra to shielded squares
-		var start_p: Vector2 = boss_center + Vector2(0.0, 6.0)
-		var pulse_a: float = 0.26 + 0.14 * sin(_boss_anim_time * 9.0)
-		for s_dir: String in story_bomb_dirs:
-			if s_dir == "":
-				continue
-			var end_p: Vector2 = _get_board_center(s_dir) - canvas_offset
-			_story_boss_canvas.draw_line(start_p, end_p, Color(0.15, 1.0, 0.72, pulse_a), 5.0, true)
-			_story_boss_canvas.draw_line(start_p, end_p, Color(0.75, 1.0, 0.95, pulse_a * 1.4), 1.8, true)
-			if _boss_throw_anim > 0.01:
-				var proj_t: float = 1.0 - _boss_throw_anim
-				var pulse_pt: Vector2 = start_p.lerp(end_p, proj_t)
-				_story_boss_canvas.draw_circle(pulse_pt, 12.0, Color(0.20, 1.0, 0.78, 0.55))
-				_story_boss_canvas.draw_arc(pulse_pt, 9.0, 0.0, TAU, 6, Color(0.85, 1.0, 0.98, 0.95), 2.4, true)
-	elif _boss_throw_anim > 0.01 and not _boss_throw_target_dirs.is_empty():
-		var throw_t: float = 1.0 - _boss_throw_anim # 0 -> 1
-		var start_p: Vector2 = boss_center + Vector2(0.0, 10.0)
-		for t_dir: String in _boss_throw_target_dirs:
-			if t_dir == "":
-				continue
-			var end_p: Vector2 = _get_board_center(t_dir) - canvas_offset
-			var arc_p: Vector2 = start_p.lerp(end_p, throw_t) + Vector2(0.0, -sin(throw_t * PI) * 68.0)
-			_story_boss_canvas.draw_circle(arc_p, 14.0, Color(1.6, 0.2, 0.25, 0.45))
-			_story_boss_canvas.draw_circle(arc_p, 8.5, Color(0.15, 0.12, 0.20, 0.98))
-			_story_boss_canvas.draw_arc(arc_p, 8.5, 0.0, TAU, 20, Color(1.6, 0.25, 0.25, 0.95), 2.2, true)
-			_story_boss_canvas.draw_circle(arc_p + Vector2(0, -10.0), 4.5, Color(1.0, 0.92, 0.25, 0.98))
-
-	# ---------------------------------------------------------
-	# 5. LASER BEAMS (Board Square -> Matching Boss Body Part)
-	# ---------------------------------------------------------
-	for beam: Dictionary in _boss_laser_beams:
-		var age: float = float(beam.get("age", 0.0))
-		var dur: float = maxf(0.01, float(beam.get("duration", 0.28)))
-		var life_t: float = clampf(1.0 - (age / dur), 0.0, 1.0)
-		var from_pt: Vector2 = (beam.get("from", Vector2.ZERO) as Vector2) - canvas_offset
-		var to_pt: Vector2 = (beam.get("to", Vector2.ZERO) as Vector2) - canvas_offset
-		var b_col: Color = beam.get("color", Color.WHITE)
-
-		# Outer neon bloom beam + inner white-hot core
-		_story_boss_canvas.draw_line(from_pt, to_pt, Color(b_col.r, b_col.g, b_col.b, 0.38 * life_t), 22.0 * life_t, true)
-		_story_boss_canvas.draw_line(from_pt, to_pt, Color(b_col.r, b_col.g, b_col.b, 0.88 * life_t), 10.0 * life_t, true)
-		_story_boss_canvas.draw_line(from_pt, to_pt, Color(1.0, 1.0, 1.0, 0.98 * life_t), 4.0 * life_t, true)
-
-		# Impact shockwave ring at the Boss body part
-		var ring_r: float = lerpf(8.0, 38.0, 1.0 - life_t)
-		_story_boss_canvas.draw_arc(to_pt, ring_r, 0.0, TAU, 28, Color(b_col.r, b_col.g, b_col.b, 0.85 * life_t), 3.5 * life_t, true)
-		_story_boss_canvas.draw_circle(to_pt, 10.0 * life_t, Color(1.0, 1.0, 1.0, 0.95 * life_t))
-
-	# ---------------------------------------------------------
-	# 6. BOSS & BODY PART EXPLOSION RINGS AND SHRAPNEL DEBRIS
-	# ---------------------------------------------------------
-	for ring: Dictionary in _boss_explosion_rings:
-		var r_age: float = float(ring.get("age", 0.0))
-		var r_dur: float = maxf(0.01, float(ring.get("duration", 0.45)))
-		var prog: float = clampf(r_age / r_dur, 0.0, 1.0)
-		var fade: float = 1.0 - prog
-		var r_pos: Vector2 = ring.get("pos", boss_center)
-		var r_col: Color = ring.get("color", Color(1.0, 0.85, 0.25))
-		var max_r: float = float(ring.get("max_radius", 90.0))
-		var cur_r: float = lerpf(10.0, max_r, prog)
-		_story_boss_canvas.draw_circle(r_pos, cur_r * 0.55 * fade, Color(1.5, 1.2, 0.6, 0.55 * fade))
-		_story_boss_canvas.draw_arc(r_pos, cur_r, 0.0, TAU, 36, Color(r_col.r, r_col.g, r_col.b, 0.92 * fade), maxf(2.0, 7.0 * fade), true)
-		_story_boss_canvas.draw_arc(r_pos, cur_r * 0.72, 0.0, TAU, 28, Color(1.0, 1.0, 1.0, 0.85 * fade), maxf(1.5, 3.5 * fade), true)
-
-	for shard: Dictionary in _boss_explosion_shrapnel:
-		var s_age: float = float(shard.get("age", 0.0))
-		var s_dur: float = maxf(0.01, float(shard.get("duration", 0.7)))
-		var fade: float = clampf(1.0 - (s_age / s_dur), 0.0, 1.0)
-		var s_pos: Vector2 = shard.get("pos", boss_center)
-		var s_rot: float = float(shard.get("rot", 0.0))
-		var s_size: float = float(shard.get("size", 8.0)) * (0.4 + 0.6 * fade)
-		var s_col: Color = shard.get("color", Color.WHITE)
-		var p1 := s_pos + Vector2(cos(s_rot), sin(s_rot)) * s_size
-		var p2 := s_pos + Vector2(cos(s_rot + 2.1), sin(s_rot + 2.1)) * (s_size * 0.85)
-		var p3 := s_pos + Vector2(cos(s_rot + 4.2), sin(s_rot + 4.2)) * (s_size * 0.75)
-		_story_boss_canvas.draw_colored_polygon(PackedVector2Array([p1, p2, p3]), Color(s_col.r, s_col.g, s_col.b, fade))
-
-
-func _draw_story_level1_preview() -> void:
-	if _story_level1_preview_ctrl == null or not is_instance_valid(_story_level1_preview_ctrl):
-		return
-	var s: Vector2 = _story_level1_preview_ctrl.size
-	var c: Vector2 = Vector2(s.x * 0.5, s.y * 0.54)
-	# Subtle dark cyber pedestal backdrop
-	_story_level1_preview_ctrl.draw_circle(c, 48.0, Color(0.05, 0.03, 0.12, 0.85))
-	_story_level1_preview_ctrl.draw_arc(c, 48.0, 0.0, TAU, 36, Color(0.35, 0.90, 1.0, 0.55), 2.0, true)
-	_draw_chroma_titan_figure(_story_level1_preview_ctrl, c, 0.36, true)
-
-
-func _draw_chroma_titan_figure(canvas: Control, origin: Vector2, scale_f: float = 1.0, is_preview: bool = false) -> void:
-	# When the Boss is obliterated at the end of the death sequence, fade/vaporize the chassis completely!
-	if not is_preview and _boss_death_progress > 0.88:
-		return
-
-	var death_scale: float = 1.0
-	if not is_preview and _boss_death_progress > 0.60:
-		death_scale = clampf(1.0 - (_boss_death_progress - 0.60) / 0.28, 0.0, 1.0)
-	scale_f *= death_scale
-
-	var t: float = _boss_anim_time
-	var rage_mult: float = 1.65 if (story_boss_enraged and not is_preview) else 1.0
-	var hover_y: float = sin(t * 3.2 * rage_mult) * 7.5 * scale_f
-	var breathe: float = 1.0 + sin(t * 6.4 * rage_mult) * 0.035
-
-	var shake_vec := Vector2.ZERO
-	if not is_preview and (_boss_hit_shake > 0.01 or _boss_death_progress > 0.01):
-		var sh_amp: float = (_boss_hit_shake * 9.0 + _boss_death_progress * 24.0) * scale_f
-		shake_vec = Vector2(randf_range(-sh_amp, sh_amp), randf_range(-sh_amp, sh_amp))
-
-	var taunt_hop: float = -sin(_boss_taunt_anim * PI * 2.0) * 14.0 * scale_f if not is_preview else 0.0
-	var root_pos: Vector2 = origin + Vector2(0.0, hover_y + taunt_hop) + shake_vec
-
-	# Fetch the 4 live board colors for the 4 Boss body parts!
-	var col_up: Color = direction_colors.get("up", Color(1.0, 0.25, 0.45))
-	var col_down: Color = direction_colors.get("down", Color(1.0, 0.85, 0.20))
-	var col_left: Color = direction_colors.get("left", Color(0.20, 0.95, 0.55))
-	var col_right: Color = direction_colors.get("right", Color(0.25, 0.65, 1.0))
-
-	var up_dead: bool = (not is_preview and int(story_part_hp.get("up", 1)) <= 0)
-	var down_dead: bool = (not is_preview and int(story_part_hp.get("down", 1)) <= 0)
-	var left_dead: bool = (not is_preview and int(story_part_hp.get("left", 1)) <= 0)
-	var right_dead: bool = (not is_preview and int(story_part_hp.get("right", 1)) <= 0)
-
-	if up_dead:
-		col_up = col_up.darkened(0.68)
-	if down_dead:
-		col_down = col_down.darkened(0.68)
-	if left_dead:
-		col_left = col_left.darkened(0.68)
-	if right_dead:
-		col_right = col_right.darkened(0.68)
-
-	if not is_preview:
-		var death_glow: float = clampf(_boss_death_progress * 1.4, 0.0, 1.0)
-		col_up = col_up.lerp(Color(2.0, 2.0, 2.2), maxf(death_glow, clampf(float(_boss_part_flash.get("up", 0.0)), 0.0, 1.0)))
-		col_down = col_down.lerp(Color(2.0, 2.0, 2.2), maxf(death_glow, clampf(float(_boss_part_flash.get("down", 0.0)), 0.0, 1.0)))
-		col_left = col_left.lerp(Color(2.0, 2.0, 2.2), maxf(death_glow, clampf(float(_boss_part_flash.get("left", 0.0)), 0.0, 1.0)))
-		col_right = col_right.lerp(Color(2.0, 2.0, 2.2), maxf(death_glow, clampf(float(_boss_part_flash.get("right", 0.0)), 0.0, 1.0)))
-
-	# During death sequence, parts fly violently apart!
-	var death_split: float = (_boss_death_progress * _boss_death_progress * 145.0 * scale_f) if not is_preview else 0.0
-	var dark_armor := Color(0.07, 0.05, 0.16, 0.96)
-
-	# ---------------------------------------------------------
-	# A. BACKGROUND HOLOGRAPHIC FORCEFIELD HEX-RING
-	# ---------------------------------------------------------
-	var aura_col := Color(1.0, 0.22, 0.38, 0.26) if (story_boss_enraged and not is_preview) else Color(0.30, 0.88, 1.0, 0.20)
-	var aura_r: float = (94.0 + sin(t * 4.0) * 5.0) * scale_f
-	var hex_aura := PackedVector2Array()
-	for i in range(7):
-		var ang: float = t * 0.55 + float(i) * (TAU / 6.0)
-		hex_aura.append(root_pos + Vector2(cos(ang), sin(ang)) * aura_r)
-	canvas.draw_polyline(hex_aura, aura_col, maxf(1.5, 3.0 * scale_f), true)
-
-	# Energy tether conduits connecting Torso to Head, Left Arm, and Right Arm
-	var rec_up: float = (float(_boss_part_recoil.get("up", 0.0)) * 18.0 * scale_f) if not is_preview else 0.0
-	var rec_down: float = (float(_boss_part_recoil.get("down", 0.0)) * 14.0 * scale_f) if not is_preview else 0.0
-	var rec_left: float = (float(_boss_part_recoil.get("left", 0.0)) * 22.0 * scale_f) if not is_preview else 0.0
-	var rec_right: float = (float(_boss_part_recoil.get("right", 0.0)) * 22.0 * scale_f) if not is_preview else 0.0
-
-	var torso_c: Vector2 = root_pos + Vector2(0.0, 12.0 * scale_f + rec_down + death_split * 0.5)
-	var head_c: Vector2 = root_pos + Vector2(0.0, -68.0 * scale_f - rec_up - death_split + sin(t * 4.2) * 3.0 * scale_f)
-	var throw_lunge_l: float = sin(_boss_throw_anim * PI) * 18.0 * scale_f if (not is_preview and (_boss_throw_target_dir == "left" or _boss_throw_target_dir == "up")) else 0.0
-	var throw_lunge_r: float = sin(_boss_throw_anim * PI) * 18.0 * scale_f if (not is_preview and (_boss_throw_target_dir == "right" or _boss_throw_target_dir == "down")) else 0.0
-	var left_c: Vector2 = root_pos + Vector2(-112.0 * scale_f - rec_left - death_split, -4.0 * scale_f + cos(t * 3.6 + 0.8) * 6.5 * scale_f + throw_lunge_l)
-	var right_c: Vector2 = root_pos + Vector2(112.0 * scale_f + rec_right + death_split, -4.0 * scale_f + cos(t * 3.6 + 2.4) * 6.5 * scale_f + throw_lunge_r)
-
-	# Plasma shoulder beams
-	if _boss_death_progress < 0.25:
-		canvas.draw_line(torso_c + Vector2(-42.0, -18.0) * scale_f, left_c + Vector2(26.0, -6.0) * scale_f, Color(col_left.r, col_left.g, col_left.b, 0.55), maxf(2.0, 5.0 * scale_f), true)
-		canvas.draw_line(torso_c + Vector2(42.0, -18.0) * scale_f, right_c + Vector2(-26.0, -6.0) * scale_f, Color(col_right.r, col_right.g, col_right.b, 0.55), maxf(2.0, 5.0 * scale_f), true)
-		canvas.draw_line(torso_c + Vector2(0.0, -36.0) * scale_f, head_c + Vector2(0.0, 26.0) * scale_f, Color(col_up.r, col_up.g, col_up.b, 0.60), maxf(2.0, 5.5 * scale_f), true)
-
-	# ---------------------------------------------------------
-	# B. TORSO / HEX REACTOR CORE ("down" color + Diamond emblem)
-	# ---------------------------------------------------------
-	var tw_s: float = scale_f * breathe
-	var torso_pts := PackedVector2Array([
-		torso_c + Vector2(-46.0, -38.0) * tw_s,
-		torso_c + Vector2(46.0, -38.0) * tw_s,
-		torso_c + Vector2(62.0, -4.0) * tw_s,
-		torso_c + Vector2(36.0, 48.0) * tw_s,
-		torso_c + Vector2(-36.0, 48.0) * tw_s,
-		torso_c + Vector2(-62.0, -4.0) * tw_s,
-	])
-	var torso_closed := torso_pts.duplicate()
-	torso_closed.append(torso_pts[0])
-	canvas.draw_colored_polygon(torso_pts, dark_armor)
-	canvas.draw_polyline(torso_closed, Color(col_down.r, col_down.g, col_down.b, 0.42), maxf(3.0, 8.5 * scale_f), true)
-	canvas.draw_polyline(torso_closed, col_down, maxf(1.8, 3.6 * scale_f), true)
-
-	# Inner armor plates colored with `col_down`
-	var inner_torso := PackedVector2Array([
-		torso_c + Vector2(-34.0, -28.0) * tw_s,
-		torso_c + Vector2(34.0, -28.0) * tw_s,
-		torso_c + Vector2(46.0, -2.0) * tw_s,
-		torso_c + Vector2(26.0, 36.0) * tw_s,
-		torso_c + Vector2(-26.0, 36.0) * tw_s,
-		torso_c + Vector2(-46.0, -2.0) * tw_s,
-	])
-	canvas.draw_colored_polygon(inner_torso, Color(col_down.r, col_down.g, col_down.b, 0.85))
-
-	# Counter-rotating reactor ring & Diamond Core ("down" symbol)
-	var core_r: float = 22.0 * tw_s
-	canvas.draw_circle(torso_c + Vector2(0, 4.0 * tw_s), core_r, dark_armor)
-	canvas.draw_arc(torso_c + Vector2(0, 4.0 * tw_s), core_r, t * 2.5, t * 2.5 + PI * 1.4, 20, Color(1.0, 1.0, 1.0, 0.9), maxf(1.5, 2.8 * scale_f), true)
-	var dm_c := torso_c + Vector2(0, 4.0 * tw_s)
-	var dm_r: float = 12.5 * tw_s
-	var dm_pts := PackedVector2Array([
-		dm_c + Vector2(0, -dm_r),
-		dm_c + Vector2(dm_r, 0),
-		dm_c + Vector2(0, dm_r),
-		dm_c + Vector2(-dm_r, 0),
-	])
-	var core_gem_col: Color = Color(1.5, 0.30, 0.40) if (story_boss_enraged and not is_preview) else col_down.lightened(0.25)
-	canvas.draw_colored_polygon(dm_pts, core_gem_col)
-	var dm_closed := dm_pts.duplicate()
-	dm_closed.append(dm_pts[0])
-	canvas.draw_polyline(dm_closed, Color(1.0, 1.0, 1.0, 0.95), maxf(1.2, 2.2 * scale_f), true)
-
-	# ---------------------------------------------------------
-	# C. CROWN HELM & LASER VISOR ("up" color + Triangle emblem)
-	# ---------------------------------------------------------
-	var l_horn := PackedVector2Array([
-		head_c + Vector2(-34.0, -8.0) * scale_f,
-		head_c + Vector2(-58.0, -42.0) * scale_f,
-		head_c + Vector2(-22.0, -26.0) * scale_f,
-	])
-	var r_horn := PackedVector2Array([
-		head_c + Vector2(34.0, -8.0) * scale_f,
-		head_c + Vector2(58.0, -42.0) * scale_f,
-		head_c + Vector2(22.0, -26.0) * scale_f,
-	])
-	canvas.draw_colored_polygon(l_horn, col_up)
-	canvas.draw_colored_polygon(r_horn, col_up)
-
-	var head_pts := PackedVector2Array([
-		head_c + Vector2(0.0, -38.0) * scale_f,
-		head_c + Vector2(40.0, -20.0) * scale_f,
-		head_c + Vector2(34.0, 22.0) * scale_f,
-		head_c + Vector2(0.0, 30.0) * scale_f,
-		head_c + Vector2(-34.0, 22.0) * scale_f,
-		head_c + Vector2(-40.0, -20.0) * scale_f,
-	])
-	var head_closed := head_pts.duplicate()
-	head_closed.append(head_pts[0])
-	canvas.draw_colored_polygon(head_pts, col_up)
-	canvas.draw_polyline(head_closed, Color(col_up.r, col_up.g, col_up.b, 0.45), maxf(3.0, 8.0 * scale_f), true)
-	canvas.draw_polyline(head_closed, Color(1.0, 1.0, 1.0, 0.35 if up_dead else 0.92), maxf(1.5, 3.0 * scale_f), true)
-
-	var visor_pts := PackedVector2Array([
-		head_c + Vector2(-28.0, -4.0) * scale_f,
-		head_c + Vector2(28.0, -4.0) * scale_f,
-		head_c + Vector2(22.0, 14.0) * scale_f,
-		head_c + Vector2(-22.0, 14.0) * scale_f,
-	])
-	canvas.draw_colored_polygon(visor_pts, dark_armor)
-
-	var eye_col := Color(1.0, 0.2, 0.3) if (story_boss_enraged and not is_preview) else Color(1.0, 0.96, 0.35)
-	var eye_slant: float = 4.5 if (story_boss_enraged or _boss_hit_shake > 0.1) else 2.0
-	canvas.draw_line(head_c + Vector2(-19.0, 2.0) * scale_f, head_c + Vector2(-6.0, 2.0 + eye_slant) * scale_f, eye_col, maxf(2.0, 4.2 * scale_f), true)
-	canvas.draw_line(head_c + Vector2(19.0, 2.0) * scale_f, head_c + Vector2(6.0, 2.0 + eye_slant) * scale_f, eye_col, maxf(2.0, 4.2 * scale_f), true)
-
-	var tri_c := head_c + Vector2(0.0, -17.0 * scale_f)
-	var tri_pts := PackedVector2Array([
-		tri_c + Vector2(0.0, -10.0) * scale_f,
-		tri_c + Vector2(10.0, 8.0) * scale_f,
-		tri_c + Vector2(-10.0, 8.0) * scale_f,
-	])
-	canvas.draw_colored_polygon(tri_pts, Color(1.0, 1.0, 1.0, 0.35 if up_dead else 0.95))
-	var tri_closed := tri_pts.duplicate()
-	tri_closed.append(tri_pts[0])
-	canvas.draw_polyline(tri_closed, dark_armor, maxf(1.2, 2.0 * scale_f), true)
-
-	# ---------------------------------------------------------
-	# D. LEFT PLASMA CLAW ARM ("left" color + Square emblem)
-	# ---------------------------------------------------------
-	var l_arm_pts := PackedVector2Array([
-		left_c + Vector2(-28.0, -30.0) * scale_f,
-		left_c + Vector2(24.0, -24.0) * scale_f,
-		left_c + Vector2(28.0, 18.0) * scale_f,
-		left_c + Vector2(-24.0, 24.0) * scale_f,
-	])
-	var l_arm_closed := l_arm_pts.duplicate()
-	l_arm_closed.append(l_arm_pts[0])
-	canvas.draw_colored_polygon(l_arm_pts, col_left)
-	canvas.draw_polyline(l_arm_closed, Color(col_left.r, col_left.g, col_left.b, 0.45), maxf(3.0, 7.5 * scale_f), true)
-	canvas.draw_polyline(l_arm_closed, Color(1.0, 1.0, 1.0, 0.35 if left_dead else 0.9), maxf(1.5, 2.8 * scale_f), true)
-
-	var pinch: float = sin(t * 5.5) * 4.5 * scale_f
-	var l_claw1 := PackedVector2Array([
-		left_c + Vector2(-20.0, 22.0) * scale_f,
-		left_c + Vector2(-10.0, 44.0) * scale_f + Vector2(pinch, 0.0),
-		left_c + Vector2(-4.0, 22.0) * scale_f,
-	])
-	var l_claw2 := PackedVector2Array([
-		left_c + Vector2(4.0, 22.0) * scale_f,
-		left_c + Vector2(12.0, 44.0) * scale_f - Vector2(pinch, 0.0),
-		left_c + Vector2(20.0, 22.0) * scale_f,
-	])
-	canvas.draw_colored_polygon(l_claw1, Color(1.0, 1.0, 1.0, 0.35 if left_dead else 0.92))
-	canvas.draw_colored_polygon(l_claw2, Color(1.0, 1.0, 1.0, 0.35 if left_dead else 0.92))
-
-	var sq_r: float = 10.0 * scale_f
-	var sq_rect := Rect2(left_c.x - sq_r, left_c.y - sq_r - 2.0 * scale_f, sq_r * 2.0, sq_r * 2.0)
-	canvas.draw_rect(sq_rect, dark_armor, true)
-	canvas.draw_rect(Rect2(sq_rect.position + Vector2(2.0, 2.0) * scale_f, sq_rect.size - Vector2(4.0, 4.0) * scale_f), Color(1.0, 1.0, 1.0, 0.35 if left_dead else 0.95), true)
-
-	# ---------------------------------------------------------
-	# E. RIGHT ION CANNON ARM ("right" color + Circle emblem)
-	# ---------------------------------------------------------
-	var r_arm_pts := PackedVector2Array([
-		right_c + Vector2(-24.0, -24.0) * scale_f,
-		right_c + Vector2(28.0, -30.0) * scale_f,
-		right_c + Vector2(24.0, 24.0) * scale_f,
-		right_c + Vector2(-28.0, 18.0) * scale_f,
-	])
-	var r_arm_closed := r_arm_pts.duplicate()
-	r_arm_closed.append(r_arm_pts[0])
-	canvas.draw_colored_polygon(r_arm_pts, col_right)
-	canvas.draw_polyline(r_arm_closed, Color(col_right.r, col_right.g, col_right.b, 0.45), maxf(3.0, 7.5 * scale_f), true)
-	canvas.draw_polyline(r_arm_closed, Color(1.0, 1.0, 1.0, 0.35 if right_dead else 0.9), maxf(1.5, 2.8 * scale_f), true)
-
-	var muzzle_rect := Rect2(right_c.x - 14.0 * scale_f, right_c.y + 22.0 * scale_f, 28.0 * scale_f, 16.0 * scale_f)
-	canvas.draw_rect(muzzle_rect, dark_armor, true)
-	canvas.draw_rect(muzzle_rect, col_right.lightened(0.3), false, maxf(1.2, 2.2 * scale_f))
-	var orb_r: float = (6.0 + sin(t * 8.0) * 2.0) * scale_f
-	canvas.draw_circle(right_c + Vector2(0.0, 40.0 * scale_f), orb_r, Color(1.0, 1.0, 1.0, 0.35 if right_dead else 0.95))
-
-	var cir_r: float = 11.0 * scale_f
-	canvas.draw_circle(right_c + Vector2(0.0, -2.0 * scale_f), cir_r + 2.0 * scale_f, dark_armor)
-	canvas.draw_circle(right_c + Vector2(0.0, -2.0 * scale_f), cir_r, Color(1.0, 1.0, 1.0, 0.35 if right_dead else 0.95))
-
-
-func _draw_story_white_center_emblem(panel: Panel) -> void:
-	if panel == null or not is_instance_valid(panel):
-		return
-	var s: Vector2 = panel.size
-	var c: Vector2 = s * 0.5
-	var sf: float = minf(s.x, s.y) / 100.0
-	var pulse: float = 1.0 + sin(_boss_anim_time * 7.0) * 0.08
-	var all_parts_dead := _are_all_boss_parts_destroyed()
-
-	# Center prismatic star core
-	var star_r: float = 15.0 * sf * pulse
-	var inner_r: float = 6.0 * sf * pulse
-	var star_pts := PackedVector2Array([
-		c + Vector2(0, -star_r),
-		c + Vector2(inner_r, -inner_r),
-		c + Vector2(star_r, 0),
-		c + Vector2(inner_r, inner_r),
-		c + Vector2(0, star_r),
-		c + Vector2(-inner_r, inner_r),
-		c + Vector2(-star_r, 0),
-		c + Vector2(-inner_r, -inner_r),
-	])
-	var dark_outline := Color(0.08, 0.06, 0.18, 0.92)
-	var star_closed := star_pts.duplicate()
-	star_closed.append(star_pts[0])
-	panel.draw_colored_polygon(star_pts, Color(0.95, 0.25, 0.38, 0.95) if all_parts_dead else Color(0.15, 0.22, 0.38, 0.95))
-	panel.draw_polyline(star_closed, dark_outline, 2.2 * sf, true)
-
-	# 4 Outward Directional Chevrons colored with the 4 live board colors!
-	# In Phase 1, chevrons for already-destroyed parts are dimmed so the player knows which parts still need to be destroyed!
-	var dist: float = 29.0 * sf
-	var chev_dirs := {
-		"up":    [Vector2(0, -dist - 6 * sf), Vector2(9 * sf, -dist + 4 * sf), Vector2(-9 * sf, -dist + 4 * sf)],
-		"down":  [Vector2(0, dist + 6 * sf),  Vector2(9 * sf, dist - 4 * sf),  Vector2(-9 * sf, dist - 4 * sf)],
-		"left":  [Vector2(-dist - 6 * sf, 0), Vector2(-dist + 4 * sf, -9 * sf), Vector2(-dist + 4 * sf, 9 * sf)],
-		"right": [Vector2(dist + 6 * sf, 0),  Vector2(dist - 4 * sf, -9 * sf),  Vector2(dist - 4 * sf, 9 * sf)],
-	}
-	for d_key: String in chev_dirs:
-		if d_key in story_bomb_dirs or d_key == story_bomb_dir:
-			continue
-		if not all_parts_dead and int(story_part_hp.get(d_key, 0)) <= 0:
-			continue
-		var col: Color = direction_colors.get(d_key, Color(0.2, 0.8, 1.0))
-		var arr: Array = chev_dirs[d_key]
-		var pts := PackedVector2Array([c + arr[0], c + arr[1], c + arr[2]])
-		var closed := pts.duplicate()
-		closed.append(pts[0])
-		panel.draw_polyline(closed, dark_outline, 3.8 * sf, true)
-		panel.draw_colored_polygon(pts, col)
-
-
-func _draw_story_bomb_icon(panel: Panel) -> void:
-	if panel == null or not is_instance_valid(panel):
-		return
-	var s: Vector2 = panel.size
-	var c: Vector2 = s * 0.5 + Vector2(0.0, 4.0)
-	var sf: float = minf(s.x, s.y) / 100.0
-	var t: float = _boss_anim_time
-
-	# 1. Pulsing crimson danger ring around the bomb
-	var pulse: float = 1.0 + sin(t * 14.0) * 0.08
-	var ring_r: float = 34.0 * sf * pulse
-	panel.draw_arc(s * 0.5, ring_r, 0.0, TAU, 32, Color(1.6, 0.18, 0.22, 0.42), 5.5 * sf, true)
-	panel.draw_arc(s * 0.5, ring_r, 0.0, TAU, 32, Color(1.0, 0.90, 0.25, 0.92), 2.2 * sf, true)
-
-	# 2. Bomb Fuse Neck & Curved Burning Fuse
-	var neck_rect := Rect2(c.x - 6.0 * sf, c.y - 25.0 * sf, 12.0 * sf, 7.0 * sf)
-	panel.draw_rect(neck_rect, Color(0.22, 0.24, 0.32, 0.98), true)
-	panel.draw_rect(neck_rect, Color(0.9, 0.95, 1.0, 0.85), false, 1.5 * sf)
-
-	var fuse_pts := PackedVector2Array([
-		c + Vector2(0.0, -25.0) * sf,
-		c + Vector2(6.0, -33.0) * sf,
-		c + Vector2(16.0, -31.0) * sf,
-	])
-	panel.draw_polyline(fuse_pts, Color(0.85, 0.72, 0.45, 0.98), 3.2 * sf, true)
-
-	# Sputtering Burning Fuse Spark at tip
-	var spark_pos: Vector2 = fuse_pts[2] + Vector2(sin(t * 28.0), cos(t * 34.0)) * 1.8 * sf
-	var spark_r: float = (6.5 + sin(t * 24.0) * 2.5) * sf
-	panel.draw_circle(spark_pos, spark_r * 1.4, Color(1.6, 0.45, 0.1, 0.65))
-	panel.draw_circle(spark_pos, spark_r, Color(1.5, 0.95, 0.2, 0.98))
-	panel.draw_circle(spark_pos, spark_r * 0.5, Color(1.0, 1.0, 1.0, 1.0))
-
-	# 3. Spherical Dark-Iron Bomb Body
-	var bomb_r: float = 20.5 * sf
-	panel.draw_circle(c, bomb_r + 2.5 * sf, Color(0.04, 0.02, 0.08, 0.95))
-	panel.draw_circle(c, bomb_r, Color(0.14, 0.12, 0.22, 0.98))
-	panel.draw_arc(c, bomb_r, 0.0, TAU, 32, Color(1.5, 0.25, 0.30, 0.95), 2.5 * sf, true)
-
-	# Specular highlight arc on top-left of bomb sphere
-	panel.draw_circle(c + Vector2(-7.0, -7.0) * sf, 4.5 * sf, Color(1.0, 1.0, 1.0, 0.65))
-
-	# Glowing red hazard "X" / Danger Core on the bomb
-	var x_r: float = 7.5 * sf
-	var x_col := Color(1.6, 0.22, 0.25, 0.98)
-	panel.draw_line(c + Vector2(-x_r, -x_r), c + Vector2(x_r, x_r), x_col, 3.2 * sf, true)
-	panel.draw_line(c + Vector2(x_r, -x_r), c + Vector2(-x_r, x_r), x_col, 3.2 * sf, true)
-
-
-func _draw_story_level2_preview() -> void:
-	if _story_level2_preview_ctrl == null or not is_instance_valid(_story_level2_preview_ctrl):
-		return
-	var s: Vector2 = _story_level2_preview_ctrl.size
-	var c: Vector2 = Vector2(s.x * 0.5, s.y * 0.54)
-	_story_level2_preview_ctrl.draw_circle(c, 46.0, Color(0.03, 0.11, 0.09, 0.88))
-	_story_level2_preview_ctrl.draw_arc(c, 46.0, 0.0, TAU, 36, Color(0.20, 1.0, 0.68, 0.62), 2.0, true)
-	_draw_cyber_hydra_figure(_story_level2_preview_ctrl, c, 0.34, true)
-	if settings == null or not settings.is_story_level_cleared(1):
-		_draw_story_locked_overlay(_story_level2_preview_ctrl, c)
-
-
-func _draw_story_level3_preview() -> void:
-	if _story_level3_preview_ctrl == null or not is_instance_valid(_story_level3_preview_ctrl):
-		return
-	var s: Vector2 = _story_level3_preview_ctrl.size
-	var c: Vector2 = Vector2(s.x * 0.5, s.y * 0.54)
-	_story_level3_preview_ctrl.draw_circle(c, 46.0, Color(0.09, 0.03, 0.15, 0.88))
-	_story_level3_preview_ctrl.draw_arc(c, 46.0, 0.0, TAU, 36, Color(0.92, 0.42, 1.0, 0.62), 2.0, true)
-	_draw_void_seraph_figure(_story_level3_preview_ctrl, c, 0.34, true)
-	if settings == null or not settings.is_story_level_cleared(2):
-		_draw_story_locked_overlay(_story_level3_preview_ctrl, c)
-
-
-func _draw_story_locked_overlay(canvas: Control, c: Vector2) -> void:
-	canvas.draw_circle(c, 46.0, Color(0.03, 0.02, 0.08, 0.72))
-	canvas.draw_arc(c + Vector2(0.0, -7.0), 8.5, PI, TAU, 16, Color(1.0, 0.88, 0.35, 0.95), 3.0, true)
-	var body_rect := Rect2(c.x - 12.0, c.y - 6.0, 24.0, 19.0)
-	canvas.draw_rect(body_rect, Color(0.14, 0.10, 0.24, 0.98), true)
-	canvas.draw_rect(body_rect, Color(1.0, 0.88, 0.35, 0.96), false, 2.2)
-	canvas.draw_circle(c + Vector2(0.0, 2.5), 2.8, Color(1.0, 0.88, 0.35, 0.98))
-
-
-func _draw_cyber_hydra_figure(canvas: Control, origin: Vector2, scale_f: float = 1.0, is_preview: bool = false) -> void:
-	if not is_preview and _boss_death_progress > 0.88:
-		return
-
-	var death_scale: float = 1.0
-	if not is_preview and _boss_death_progress > 0.60:
-		death_scale = clampf(1.0 - (_boss_death_progress - 0.60) / 0.28, 0.0, 1.0)
-	scale_f *= death_scale
-
-	var t: float = _boss_anim_time
-	var rage_mult: float = 1.65 if (story_boss_enraged and not is_preview) else 1.0
-	var hover_y: float = sin(t * 3.5 * rage_mult) * 7.0 * scale_f
-	var breathe: float = 1.0 + sin(t * 6.8 * rage_mult) * 0.04
-
-	var shake_vec := Vector2.ZERO
-	if not is_preview and (_boss_hit_shake > 0.01 or _boss_death_progress > 0.01):
-		var sh_amp: float = (_boss_hit_shake * 9.0 + _boss_death_progress * 24.0) * scale_f
-		shake_vec = Vector2(randf_range(-sh_amp, sh_amp), randf_range(-sh_amp, sh_amp))
-
-	var taunt_hop: float = -sin(_boss_taunt_anim * PI * 2.0) * 14.0 * scale_f if not is_preview else 0.0
-	var root_pos: Vector2 = origin + Vector2(0.0, hover_y + taunt_hop) + shake_vec
-
-	var col_up: Color = direction_colors.get("up", Color(1.0, 0.25, 0.45))
-	var col_down: Color = direction_colors.get("down", Color(1.0, 0.85, 0.20))
-	var col_left: Color = direction_colors.get("left", Color(0.20, 0.95, 0.55))
-	var col_right: Color = direction_colors.get("right", Color(0.25, 0.65, 1.0))
-
-	var up_dead: bool = (not is_preview and int(story_part_hp.get("up", 1)) <= 0)
-	var down_dead: bool = (not is_preview and int(story_part_hp.get("down", 1)) <= 0)
-	var left_dead: bool = (not is_preview and int(story_part_hp.get("left", 1)) <= 0)
-	var right_dead: bool = (not is_preview and int(story_part_hp.get("right", 1)) <= 0)
-
-	if up_dead:
-		col_up = col_up.darkened(0.68)
-	if down_dead:
-		col_down = col_down.darkened(0.68)
-	if left_dead:
-		col_left = col_left.darkened(0.68)
-	if right_dead:
-		col_right = col_right.darkened(0.68)
-
-	if not is_preview:
-		var death_glow: float = clampf(_boss_death_progress * 1.4, 0.0, 1.0)
-		col_up = col_up.lerp(Color(2.0, 2.0, 2.2), maxf(death_glow, clampf(float(_boss_part_flash.get("up", 0.0)), 0.0, 1.0)))
-		col_down = col_down.lerp(Color(2.0, 2.0, 2.2), maxf(death_glow, clampf(float(_boss_part_flash.get("down", 0.0)), 0.0, 1.0)))
-		col_left = col_left.lerp(Color(2.0, 2.0, 2.2), maxf(death_glow, clampf(float(_boss_part_flash.get("left", 0.0)), 0.0, 1.0)))
-		col_right = col_right.lerp(Color(2.0, 2.0, 2.2), maxf(death_glow, clampf(float(_boss_part_flash.get("right", 0.0)), 0.0, 1.0)))
-
-	var death_split: float = (_boss_death_progress * _boss_death_progress * 145.0 * scale_f) if not is_preview else 0.0
-	var dark_armor := Color(0.04, 0.11, 0.10, 0.96)
-
-	# Rotating Double Bio-Hex Aura
-	var aura_col := Color(1.0, 0.22, 0.45, 0.28) if (story_boss_enraged and not is_preview) else Color(0.18, 1.0, 0.68, 0.24)
-	var aura_r: float = (98.0 + sin(t * 4.2) * 6.0) * scale_f
-	var oct_aura := PackedVector2Array()
-	for i in range(9):
-		var ang: float = -t * 0.65 + float(i) * (TAU / 8.0)
-		oct_aura.append(root_pos + Vector2(cos(ang), sin(ang)) * aura_r)
-	canvas.draw_polyline(oct_aura, aura_col, maxf(1.5, 3.0 * scale_f), true)
-
-	var rec_up: float = (float(_boss_part_recoil.get("up", 0.0)) * 18.0 * scale_f) if not is_preview else 0.0
-	var rec_down: float = (float(_boss_part_recoil.get("down", 0.0)) * 16.0 * scale_f) if not is_preview else 0.0
-	var rec_left: float = (float(_boss_part_recoil.get("left", 0.0)) * 22.0 * scale_f) if not is_preview else 0.0
-	var rec_right: float = (float(_boss_part_recoil.get("right", 0.0)) * 22.0 * scale_f) if not is_preview else 0.0
-
-	# Central Hydra Heart Reactor
-	var heart_c: Vector2 = root_pos + Vector2(0.0, -14.0 * scale_f)
-	var head_up_c: Vector2 = root_pos + Vector2(sin(t * 3.8) * 9.0 * scale_f, -76.0 * scale_f - rec_up - death_split)
-	var head_down_c: Vector2 = root_pos + Vector2(cos(t * 4.1) * 7.0 * scale_f, 36.0 * scale_f + rec_down + death_split)
-	var head_left_c: Vector2 = root_pos + Vector2(-116.0 * scale_f - rec_left - death_split, -6.0 * scale_f + sin(t * 4.4 + 1.1) * 9.0 * scale_f)
-	var head_right_c: Vector2 = root_pos + Vector2(116.0 * scale_f + rec_right + death_split, -6.0 * scale_f + sin(t * 4.4 + 2.7) * 9.0 * scale_f)
-
-	# Slithering segmented cyber-serpent necks connecting Hydra Heart to all 4 Fang Heads
-	var neck_targets := [
-		{"pos": head_up_c, "col": col_up, "dead": up_dead, "bend": Vector2(sin(t * 5.0) * 16.0, -38.0) * scale_f},
-		{"pos": head_down_c, "col": col_down, "dead": down_dead, "bend": Vector2(cos(t * 5.0) * 14.0, 14.0) * scale_f},
-		{"pos": head_left_c, "col": col_left, "dead": left_dead, "bend": Vector2(-58.0, -24.0 + sin(t * 5.2) * 14.0) * scale_f},
-		{"pos": head_right_c, "col": col_right, "dead": right_dead, "bend": Vector2(58.0, -24.0 + cos(t * 5.2) * 14.0) * scale_f},
-	]
-	if _boss_death_progress < 0.30:
-		for nk: Dictionary in neck_targets:
-			var p0: Vector2 = heart_c
-			var p2: Vector2 = nk["pos"]
-			var p1: Vector2 = heart_c + (nk["bend"] as Vector2)
-			var n_col: Color = nk["col"]
-			var is_d: bool = nk["dead"]
-			var pts := PackedVector2Array()
-			for s_i in range(7):
-				var u: float = float(s_i) / 6.0
-				var q0: Vector2 = p0.lerp(p1, u)
-				var q1: Vector2 = p1.lerp(p2, u)
-				var spine_pt: Vector2 = q0.lerp(q1, u)
-				pts.append(spine_pt)
-			canvas.draw_polyline(pts, Color(n_col.r, n_col.g, n_col.b, 0.32 if is_d else 0.72), maxf(2.5, 9.0 * scale_f), true)
-			canvas.draw_polyline(pts, dark_armor, maxf(1.5, 4.5 * scale_f), true)
-			for s_i in range(1, 6):
-				canvas.draw_circle(pts[s_i], 4.5 * scale_f, Color(n_col.r, n_col.g, n_col.b, 0.35 if is_d else 0.92))
-
-	# Central Hydra Heart Reactor Core
-	var hr_s: float = scale_f * breathe
-	var heart_oct := PackedVector2Array()
-	for i in range(8):
-		var a: float = float(i) * (TAU / 8.0) + PI * 0.125
-		heart_oct.append(heart_c + Vector2(cos(a), sin(a)) * (34.0 * hr_s))
-	var heart_closed := heart_oct.duplicate()
-	heart_closed.append(heart_oct[0])
-	canvas.draw_colored_polygon(heart_oct, dark_armor)
-	var heart_col := Color(1.0, 0.22, 0.42) if (story_boss_enraged and not is_preview) else Color(0.20, 1.0, 0.68)
-	canvas.draw_polyline(heart_closed, heart_col, maxf(1.8, 3.6 * scale_f), true)
-	canvas.draw_circle(heart_c, 15.0 * hr_s, Color(heart_col.r, heart_col.g, heart_col.b, 0.88))
-	canvas.draw_arc(heart_c, 21.0 * hr_s, -t * 3.2, -t * 3.2 + PI * 1.35, 18, Color(1.0, 1.0, 1.0, 0.92), maxf(1.4, 2.5 * scale_f), true)
-
-	# Helper array to draw all 4 Serpent Fang Heads with their matching board shape emblem
-	var heads_data := [
-		{"pos": head_up_c, "col": col_up, "dead": up_dead, "shape": "up"},
-		{"pos": head_down_c, "col": col_down, "dead": down_dead, "shape": "down"},
-		{"pos": head_left_c, "col": col_left, "dead": left_dead, "shape": "left"},
-		{"pos": head_right_c, "col": col_right, "dead": right_dead, "shape": "right"},
-	]
-	var jaw_open: float = (3.5 + sin(t * 7.2) * 2.5) * scale_f
-	for hd: Dictionary in heads_data:
-		var hc: Vector2 = hd["pos"]
-		var hcol: Color = hd["col"]
-		var hdead: bool = hd["dead"]
-		var hshape: String = hd["shape"]
-
-		# Cobra hood flare fins
-		var hood_pts := PackedVector2Array([
-			hc + Vector2(0.0, -28.0) * scale_f,
-			hc + Vector2(34.0, -10.0) * scale_f,
-			hc + Vector2(24.0, 20.0) * scale_f,
-			hc + Vector2(0.0, 26.0) * scale_f,
-			hc + Vector2(-24.0, 20.0) * scale_f,
-			hc + Vector2(-34.0, -10.0) * scale_f,
-		])
-		var hood_closed := hood_pts.duplicate()
-		hood_closed.append(hood_pts[0])
-		canvas.draw_colored_polygon(hood_pts, hcol)
-		canvas.draw_polyline(hood_closed, Color(1.0, 1.0, 1.0, 0.32 if hdead else 0.90), maxf(1.4, 2.6 * scale_f), true)
-
-		# Inner dark serpent faceplate
-		var face_pts := PackedVector2Array([
-			hc + Vector2(-20.0, -12.0) * scale_f,
-			hc + Vector2(20.0, -12.0) * scale_f,
-			hc + Vector2(15.0, 14.0) * scale_f,
-			hc + Vector2(-15.0, 14.0) * scale_f,
-		])
-		canvas.draw_colored_polygon(face_pts, dark_armor)
-
-		# Twin glowing venom fangs at bottom of jaw
-		var fang_alpha: float = 0.30 if hdead else 0.96
-		var l_fang := PackedVector2Array([
-			hc + Vector2(-14.0, 18.0) * scale_f,
-			hc + Vector2(-9.0, 32.0) * scale_f + Vector2(0.0, jaw_open),
-			hc + Vector2(-5.0, 18.0) * scale_f,
-		])
-		var r_fang := PackedVector2Array([
-			hc + Vector2(5.0, 18.0) * scale_f,
-			hc + Vector2(9.0, 32.0) * scale_f + Vector2(0.0, jaw_open),
-			hc + Vector2(14.0, 18.0) * scale_f,
-		])
-		canvas.draw_colored_polygon(l_fang, Color(0.85, 1.0, 0.95, fang_alpha))
-		canvas.draw_colored_polygon(r_fang, Color(0.85, 1.0, 0.95, fang_alpha))
-
-		# Slit serpent eyes
-		var eye_c := Color(0.25, 1.0, 0.72, fang_alpha) if not story_boss_enraged else Color(1.0, 0.25, 0.38, fang_alpha)
-		canvas.draw_line(hc + Vector2(-15.0, -5.0) * scale_f, hc + Vector2(-5.0, -2.0) * scale_f, eye_c, maxf(1.6, 3.2 * scale_f), true)
-		canvas.draw_line(hc + Vector2(15.0, -5.0) * scale_f, hc + Vector2(5.0, -2.0) * scale_f, eye_c, maxf(1.6, 3.2 * scale_f), true)
-
-		# Direction shape emblem on forehead/jaw
-		var em_c := hc + Vector2(0.0, 5.0 * scale_f)
-		var em_col := Color(1.0, 1.0, 1.0, 0.35 if hdead else 0.95)
-		match hshape:
-			"up":
-				var tri := PackedVector2Array([
-					em_c + Vector2(0.0, -7.5) * scale_f,
-					em_c + Vector2(7.5, 6.0) * scale_f,
-					em_c + Vector2(-7.5, 6.0) * scale_f,
-				])
-				canvas.draw_colored_polygon(tri, em_col)
-			"down":
-				var dm := PackedVector2Array([
-					em_c + Vector2(0.0, -8.0) * scale_f,
-					em_c + Vector2(8.0, 0.0) * scale_f,
-					em_c + Vector2(0.0, 8.0) * scale_f,
-					em_c + Vector2(-8.0, 0.0) * scale_f,
-				])
-				canvas.draw_colored_polygon(dm, em_col)
-			"left":
-				var r_s: float = 6.2 * scale_f
-				canvas.draw_rect(Rect2(em_c.x - r_s, em_c.y - r_s, r_s * 2.0, r_s * 2.0), em_col, true)
-			"right":
-				canvas.draw_circle(em_c, 6.8 * scale_f, em_col)
-
-
-func _draw_story_hydra_shield_icon(panel: Panel) -> void:
-	if panel == null or not is_instance_valid(panel):
-		return
-	var s: Vector2 = panel.size
-	var c: Vector2 = s * 0.5
-	var sf: float = minf(s.x, s.y) / 100.0
-	var t: float = _boss_anim_time
-
-	# 1. Rotating Outer Hexagonal Forcefield Barrier
-	var pulse: float = 1.0 + sin(t * 11.0) * 0.07
-	var hex_r: float = 34.0 * sf * pulse
-	var hex_pts := PackedVector2Array()
-	for i in range(6):
-		var ang: float = t * 1.4 + float(i) * (TAU / 6.0)
-		hex_pts.append(c + Vector2(cos(ang), sin(ang)) * hex_r)
-	var hex_closed := hex_pts.duplicate()
-	hex_closed.append(hex_pts[0])
-	panel.draw_colored_polygon(hex_pts, Color(0.04, 0.24, 0.22, 0.78))
-	panel.draw_polyline(hex_closed, Color(0.15, 1.0, 0.75, 0.45), 6.0 * sf, true)
-	panel.draw_polyline(hex_closed, Color(0.65, 1.0, 0.92, 0.96), 2.5 * sf, true)
-
-	# 2. Inner Crest Shield Silhouette
-	var sh_pts := PackedVector2Array([
-		c + Vector2(0.0, -21.0) * sf,
-		c + Vector2(18.0, -13.0) * sf,
-		c + Vector2(15.0, 6.0) * sf,
-		c + Vector2(0.0, 22.0) * sf,
-		c + Vector2(-15.0, 6.0) * sf,
-		c + Vector2(-18.0, -13.0) * sf,
-	])
-	var sh_closed := sh_pts.duplicate()
-	sh_closed.append(sh_pts[0])
-	panel.draw_colored_polygon(sh_pts, Color(0.06, 0.14, 0.18, 0.96))
-	panel.draw_polyline(sh_closed, Color(0.20, 1.0, 0.72, 0.98), 2.8 * sf, true)
-
-	# 3. Glowing Life-Drain / Reflect Cross-Core inside the Shield
-	var cr: float = 8.5 * sf
-	var core_col := Color(0.85, 1.0, 0.95, 0.98)
-	panel.draw_line(c + Vector2(0.0, -cr), c + Vector2(0.0, cr), core_col, 3.2 * sf, true)
-	panel.draw_line(c + Vector2(-cr, 0.0), c + Vector2(cr, 0.0), core_col, 3.2 * sf, true)
-	panel.draw_circle(c, 3.5 * sf, Color(0.20, 1.0, 0.72, 1.0))
-
-
-func _draw_story_hydra_regrow_badge(panel: Panel) -> void:
-	if panel == null or not is_instance_valid(panel):
-		return
-	var s: Vector2 = panel.size
-	var c: Vector2 = s * 0.5
-	var sf: float = minf(s.x, s.y) / 100.0
-	var t: float = _boss_anim_time
-
-	# Pulsing bio-green regrowth warning ring on severed head squares
-	var r: float = (26.0 + sin(t * 8.0) * 2.5) * sf
-	panel.draw_arc(c, r, t * 2.2, t * 2.2 + PI * 1.35, 20, Color(0.25, 1.0, 0.65, 0.88), 3.0 * sf, true)
-	panel.draw_arc(c, r, t * 2.2 + PI, t * 2.2 + PI * 1.65, 12, Color(1.0, 0.92, 0.30, 0.85), 2.4 * sf, true)
-
-
-func _draw_void_seraph_figure(canvas: Control, origin: Vector2, scale_f: float = 1.0, is_preview: bool = false) -> void:
-	if not is_preview and _boss_death_progress > 0.88:
-		return
-
-	var death_scale: float = 1.0
-	if not is_preview and _boss_death_progress > 0.60:
-		death_scale = clampf(1.0 - (_boss_death_progress - 0.60) / 0.28, 0.0, 1.0)
-	scale_f *= death_scale
-
-	var t: float = _boss_anim_time
-	var rage_mult: float = 1.65 if (story_boss_enraged and not is_preview) else 1.0
-	var hover_y: float = sin(t * 3.2 * rage_mult) * 8.0 * scale_f
-	var breathe: float = 1.0 + sin(t * 6.5 * rage_mult) * 0.04
-
-	var shake_vec := Vector2.ZERO
-	if not is_preview and (_boss_hit_shake > 0.01 or _boss_death_progress > 0.01):
-		var sh_amp: float = (_boss_hit_shake * 9.0 + _boss_death_progress * 24.0) * scale_f
-		shake_vec = Vector2(randf_range(-sh_amp, sh_amp), randf_range(-sh_amp, sh_amp))
-
-	var taunt_hop: float = -sin(_boss_taunt_anim * PI * 2.0) * 14.0 * scale_f if not is_preview else 0.0
-	var root_pos: Vector2 = origin + Vector2(0.0, hover_y + taunt_hop) + shake_vec
-
-	var col_up: Color = direction_colors.get("up", Color(1.0, 0.25, 0.45))
-	var col_down: Color = direction_colors.get("down", Color(1.0, 0.85, 0.20))
-	var col_left: Color = direction_colors.get("left", Color(0.20, 0.95, 0.55))
-	var col_right: Color = direction_colors.get("right", Color(0.25, 0.65, 1.0))
-
-	var up_dead: bool = (not is_preview and int(story_part_hp.get("up", 1)) <= 0)
-	var down_dead: bool = (not is_preview and int(story_part_hp.get("down", 1)) <= 0)
-	var left_dead: bool = (not is_preview and int(story_part_hp.get("left", 1)) <= 0)
-	var right_dead: bool = (not is_preview and int(story_part_hp.get("right", 1)) <= 0)
-
-	if up_dead:
-		col_up = col_up.darkened(0.68)
-	if down_dead:
-		col_down = col_down.darkened(0.68)
-	if left_dead:
-		col_left = col_left.darkened(0.68)
-	if right_dead:
-		col_right = col_right.darkened(0.68)
-
-	if not is_preview:
-		var death_glow: float = clampf(_boss_death_progress * 1.4, 0.0, 1.0)
-		col_up = col_up.lerp(Color(2.0, 2.0, 2.2), maxf(death_glow, clampf(float(_boss_part_flash.get("up", 0.0)), 0.0, 1.0)))
-		col_down = col_down.lerp(Color(2.0, 2.0, 2.2), maxf(death_glow, clampf(float(_boss_part_flash.get("down", 0.0)), 0.0, 1.0)))
-		col_left = col_left.lerp(Color(2.0, 2.0, 2.2), maxf(death_glow, clampf(float(_boss_part_flash.get("left", 0.0)), 0.0, 1.0)))
-		col_right = col_right.lerp(Color(2.0, 2.0, 2.2), maxf(death_glow, clampf(float(_boss_part_flash.get("right", 0.0)), 0.0, 1.0)))
-
-	var death_split: float = (_boss_death_progress * _boss_death_progress * 145.0 * scale_f) if not is_preview else 0.0
-	var dark_void := Color(0.07, 0.03, 0.14, 0.96)
-
-	# 1. Counter-rotating Celestial Seraphic Rings
-	var ring_col1 := Color(0.92, 0.35, 1.0, 0.32)
-	var ring_col2 := Color(1.0, 0.88, 0.35, 0.28)
-	canvas.draw_arc(root_pos, 102.0 * scale_f, t * 0.8, t * 0.8 + PI * 1.65, 32, ring_col1, maxf(1.5, 3.2 * scale_f), true)
-	canvas.draw_arc(root_pos, 84.0 * scale_f, -t * 1.2, -t * 1.2 + PI * 1.5, 28, ring_col2, maxf(1.4, 2.5 * scale_f), true)
-
-	var rec_up: float = (float(_boss_part_recoil.get("up", 0.0)) * 18.0 * scale_f) if not is_preview else 0.0
-	var rec_down: float = (float(_boss_part_recoil.get("down", 0.0)) * 16.0 * scale_f) if not is_preview else 0.0
-	var rec_left: float = (float(_boss_part_recoil.get("left", 0.0)) * 22.0 * scale_f) if not is_preview else 0.0
-	var rec_right: float = (float(_boss_part_recoil.get("right", 0.0)) * 22.0 * scale_f) if not is_preview else 0.0
-
-	var flap: float = sin(t * 5.2) * 8.0 * scale_f
-
-	# 2. LEFT & RIGHT SERAPHIC PRISM WINGS ("left" and "right" colors)
-	var left_c: Vector2 = root_pos + Vector2(-108.0 * scale_f - rec_left - death_split, -6.0 * scale_f + flap)
-	var right_c: Vector2 = root_pos + Vector2(108.0 * scale_f + rec_right + death_split, -6.0 * scale_f + flap)
-	var up_c: Vector2 = root_pos + Vector2(0.0, -76.0 * scale_f - rec_up - death_split - flap * 0.4)
-	var down_c: Vector2 = root_pos + Vector2(0.0, 44.0 * scale_f + rec_down + death_split)
-
-	# Left Wing Feathered Prism Blades
-	var l_wing := PackedVector2Array([
-		root_pos + Vector2(-34.0, -18.0) * scale_f,
-		left_c + Vector2(-38.0, -44.0) * scale_f,
-		left_c + Vector2(-18.0, -4.0) * scale_f,
-		left_c + Vector2(-42.0, 14.0) * scale_f,
-		left_c + Vector2(-10.0, 22.0) * scale_f,
-		left_c + Vector2(-24.0, 44.0) * scale_f,
-		root_pos + Vector2(-30.0, 16.0) * scale_f,
-	])
-	var l_closed := l_wing.duplicate()
-	l_closed.append(l_wing[0])
-	canvas.draw_colored_polygon(l_wing, col_left)
-	canvas.draw_polyline(l_closed, Color(1.0, 1.0, 1.0, 0.32 if left_dead else 0.92), maxf(1.5, 2.8 * scale_f), true)
-	var l_sq: float = 7.5 * scale_f
-	canvas.draw_rect(Rect2(left_c.x - l_sq, left_c.y - l_sq, l_sq * 2.0, l_sq * 2.0), Color(1.0, 1.0, 1.0, 0.35 if left_dead else 0.96), true)
-
-	# Right Wing Feathered Prism Blades
-	var r_wing := PackedVector2Array([
-		root_pos + Vector2(34.0, -18.0) * scale_f,
-		right_c + Vector2(38.0, -44.0) * scale_f,
-		right_c + Vector2(18.0, -4.0) * scale_f,
-		right_c + Vector2(42.0, 14.0) * scale_f,
-		right_c + Vector2(10.0, 22.0) * scale_f,
-		right_c + Vector2(24.0, 44.0) * scale_f,
-		root_pos + Vector2(30.0, 16.0) * scale_f,
-	])
-	var r_closed := r_wing.duplicate()
-	r_closed.append(r_wing[0])
-	canvas.draw_colored_polygon(r_wing, col_right)
-	canvas.draw_polyline(r_closed, Color(1.0, 1.0, 1.0, 0.32 if right_dead else 0.92), maxf(1.5, 2.8 * scale_f), true)
-	canvas.draw_circle(right_c, 8.0 * scale_f, Color(1.0, 1.0, 1.0, 0.35 if right_dead else 0.96))
-
-	# 3. TOP CROWN CREST WING ("up" color)
-	var top_wing := PackedVector2Array([
-		up_c + Vector2(0.0, -34.0) * scale_f,
-		up_c + Vector2(46.0, -8.0) * scale_f,
-		up_c + Vector2(24.0, 22.0) * scale_f,
-		up_c + Vector2(0.0, 12.0) * scale_f,
-		up_c + Vector2(-24.0, 22.0) * scale_f,
-		up_c + Vector2(-46.0, -8.0) * scale_f,
-	])
-	var top_closed := top_wing.duplicate()
-	top_closed.append(top_wing[0])
-	canvas.draw_colored_polygon(top_wing, col_up)
-	canvas.draw_polyline(top_closed, Color(1.0, 1.0, 1.0, 0.32 if up_dead else 0.92), maxf(1.5, 2.8 * scale_f), true)
-	var tri_up := PackedVector2Array([
-		up_c + Vector2(0.0, -10.0) * scale_f,
-		up_c + Vector2(9.0, 6.0) * scale_f,
-		up_c + Vector2(-9.0, 6.0) * scale_f,
-	])
-	canvas.draw_colored_polygon(tri_up, Color(1.0, 1.0, 1.0, 0.35 if up_dead else 0.96))
-
-	# 4. LOWER SOLAR PENDULUM TAIL ("down" color)
-	var low_wing := PackedVector2Array([
-		down_c + Vector2(-36.0, -14.0) * scale_f,
-		down_c + Vector2(36.0, -14.0) * scale_f,
-		down_c + Vector2(22.0, 22.0) * scale_f,
-		down_c + Vector2(0.0, 38.0) * scale_f,
-		down_c + Vector2(-22.0, 22.0) * scale_f,
-	])
-	var low_closed := low_wing.duplicate()
-	low_closed.append(low_wing[0])
-	canvas.draw_colored_polygon(low_wing, col_down)
-	canvas.draw_polyline(low_closed, Color(1.0, 1.0, 1.0, 0.32 if down_dead else 0.92), maxf(1.5, 2.8 * scale_f), true)
-	var dm_down := PackedVector2Array([
-		down_c + Vector2(0.0, -2.0) * scale_f,
-		down_c + Vector2(9.0, 7.0) * scale_f,
-		down_c + Vector2(0.0, 16.0) * scale_f,
-		down_c + Vector2(-9.0, 7.0) * scale_f,
-	])
-	canvas.draw_colored_polygon(dm_down, Color(1.0, 1.0, 1.0, 0.35 if down_dead else 0.96))
-
-	# 5. CENTRAL ALL-SEEING SERAPHIC SINGULARITY EYE CORE
-	var core_s: float = scale_f * breathe
-	var eye_outer := PackedVector2Array([
-		root_pos + Vector2(-46.0, 0.0) * core_s,
-		root_pos + Vector2(-20.0, -26.0) * core_s,
-		root_pos + Vector2(20.0, -26.0) * core_s,
-		root_pos + Vector2(46.0, 0.0) * core_s,
-		root_pos + Vector2(20.0, 26.0) * core_s,
-		root_pos + Vector2(-20.0, 26.0) * core_s,
-	])
-	var eye_closed := eye_outer.duplicate()
-	eye_closed.append(eye_outer[0])
-	canvas.draw_colored_polygon(eye_outer, dark_void)
-	var eye_rim_col := Color(1.0, 0.35, 0.65) if (story_boss_enraged and not is_preview) else Color(1.0, 0.88, 0.38)
-	canvas.draw_polyline(eye_closed, eye_rim_col, maxf(1.8, 3.6 * scale_f), true)
-
-	# Iris & Vertical Slit Singularity Pupil
-	var iris_col := Color(0.92, 0.32, 1.0, 0.95) if not (story_boss_enraged and not is_preview) else Color(1.0, 0.22, 0.45, 0.98)
-	canvas.draw_circle(root_pos, 16.5 * core_s, iris_col)
-	canvas.draw_circle(root_pos, 10.0 * core_s, Color(0.04, 0.01, 0.09, 0.98))
-	var slit_pts := PackedVector2Array([
-		root_pos + Vector2(0.0, -13.0) * core_s,
-		root_pos + Vector2(4.0, 0.0) * core_s,
-		root_pos + Vector2(0.0, 13.0) * core_s,
-		root_pos + Vector2(-4.0, 0.0) * core_s,
-	])
-	canvas.draw_colored_polygon(slit_pts, Color(1.0, 0.95, 0.65, 0.98))
-
-
-func _draw_story_void_rift_icon(panel: Panel) -> void:
-	if panel == null or not is_instance_valid(panel):
-		return
-	var s: Vector2 = panel.size
-	var c: Vector2 = s * 0.5
-	var sf: float = minf(s.x, s.y) / 100.0
-	var t: float = _boss_anim_time
-
-	# 1. Swirling Outer Accretion Disk
-	var pulse: float = 1.0 + sin(t * 12.0) * 0.08
-	var outer_r: float = 34.0 * sf * pulse
-	panel.draw_circle(c, outer_r, Color(0.05, 0.01, 0.11, 0.88))
-	panel.draw_arc(c, outer_r, t * 3.5, t * 3.5 + PI * 1.45, 24, Color(1.35, 0.32, 1.85, 0.95), 4.5 * sf, true)
-	panel.draw_arc(c, outer_r * 0.76, -t * 4.8, -t * 4.8 + PI * 1.45, 20, Color(1.0, 0.88, 0.32, 0.95), 3.2 * sf, true)
-
-	# 2. 4 Curved Vortex Spiral Arms
-	for i in range(4):
-		var base_a: float = -t * 4.2 + float(i) * (TAU / 4.0)
-		var p0 := c + Vector2(cos(base_a), sin(base_a)) * (8.0 * sf)
-		var p1 := c + Vector2(cos(base_a + 0.55), sin(base_a + 0.55)) * (20.0 * sf)
-		var p2 := c + Vector2(cos(base_a + 1.15), sin(base_a + 1.15)) * (31.0 * sf)
-		panel.draw_polyline(PackedVector2Array([p0, p1, p2]), Color(0.95, 0.52, 1.0, 0.92), 2.8 * sf, true)
-
-	# 3. Black Hole Event Horizon Center
-	panel.draw_circle(c, 11.5 * sf, Color(0.02, 0.0, 0.05, 1.0))
-	panel.draw_arc(c, 11.5 * sf, 0.0, TAU, 24, Color(1.0, 0.92, 0.45, 0.96), 2.2 * sf, true)
-
-
-func _draw_story_void_drain_badge(panel: Panel) -> void:
-	if panel == null or not is_instance_valid(panel):
-		return
-	var s: Vector2 = panel.size
-	var c: Vector2 = s * 0.5
-	var sf: float = minf(s.x, s.y) / 100.0
-	var t: float = _boss_anim_time
-
-	# Swirling violet-gold warning ring on shattered wing squares
-	var r: float = (26.0 + sin(t * 9.0) * 2.5) * sf
-	panel.draw_arc(c, r, -t * 2.6, -t * 2.6 + PI * 1.35, 20, Color(0.95, 0.42, 1.0, 0.88), 3.0 * sf, true)
-	panel.draw_arc(c, r, -t * 2.6 + PI, -t * 2.6 + PI * 1.65, 12, Color(1.0, 0.88, 0.35, 0.85), 2.4 * sf, true)
-
-
-# =====================================================
-# STORY MODE — LEVEL 4: PHANTOM MAESTRO
-#   Phase 1: MELODY SEQUENCES (swipe numbered notes in order; final note = ENCORE x2 dmg)
-#   Mirror Curse: reverses swipe directions for a whole melody / 3 swipes
-#   Phase 2: MASQUERADE (True Mask flashes briefly, then all 4 squares look identical)
-# =====================================================
-
-func _layout_story_level_cards(panel: Control) -> void:
-	if panel == null:
-		return
-	var card_h: float = 164.0
-	var gap: float = 8.0
-	var top0: float = 64.0
-	for i in range(4):
-		var card := panel.get_node_or_null("Level%dCard" % (i + 1)) as Panel
-		if card == null:
-			continue
-		card.offset_top = top0 + float(i) * (card_h + gap)
-		card.offset_bottom = card.offset_top + card_h
-		for child in card.get_children():
-			if child is Button:
-				var b := child as Button
-				b.anchor_left = 0.0
-				b.anchor_right = 0.0
-				b.offset_left = 112.0
-				b.offset_right = 378.0
-				b.offset_top = 118.0
-				b.offset_bottom = 154.0
-				b.add_theme_font_size_override("font_size", 13)
-			elif child is Label:
-				var l := child as Label
-				l.offset_left = 114.0
-				l.offset_right = 378.0
-				var n: String = str(l.name)
-				if n.ends_with("Title"):
-					l.offset_top = 6.0
-					l.offset_bottom = 26.0
-				elif n.ends_with("Status"):
-					l.offset_top = 26.0
-					l.offset_bottom = 42.0
-				else:
-					l.offset_top = 44.0
-					l.offset_bottom = 114.0
-			elif child is Control:
-				var ctrl := child as Control
-				ctrl.position = Vector2(8.0, 8.0)
-				ctrl.size = Vector2(96.0, 148.0)
+	if _story_manager != null:
+		_story_manager.process_story_boss_visuals(delta)
 
 
 func _story_l4_opposite(dir: String) -> String:
-	match dir:
-		"up":
-			return "down"
-		"down":
-			return "up"
-		"left":
-			return "right"
-		"right":
-			return "left"
-	return dir
-
-
-func _build_story_l4_sequence() -> void:
-	var alive: Array[String] = _get_alive_boss_parts()
-	_story_l4_sequence.clear()
-	_story_l4_seq_index = 0
-	if alive.is_empty():
-		return
-	# 4–3 instruments alive: 2-note melodies | 2–1 alive: 3-note melodies
-	var length: int = 2 if alive.size() >= 3 else 3
-	# The final (ENCORE) note always lands on a living instrument
-	var last_note: String = alive.pick_random()
-	var pool: Array[String] = []
-	for d: String in ["up", "down", "left", "right"]:
-		if d != last_note:
-			pool.append(d)
-	pool.shuffle()
-	for i in range(length - 1):
-		_story_l4_sequence.append(pool[i])
-	_story_l4_sequence.append(last_note)
-
-	if _story_l4_mirror_pending:
-		_story_l4_mirror_pending = false
-		_story_l4_mirror_swipes = length
-		_show_remap_banner("🪞 MIRROR CURSE: SWIPES REVERSED! 🪞")
-		sfx.play_pitched("combo", 0.72)
-		_haptic_danger()
-
-
-func _start_story_level4_turn() -> void:
-	story_bomb_dirs.clear()
-	story_bomb_dir = ""
-	var all_dirs: Array[String] = ["up", "down", "left", "right"]
-
-	if _are_all_boss_parts_destroyed():
-		story_boss_enraged = true
-		# PHASE 2 — MASQUERADE: pick a new True Mask & flash it briefly before hiding all squares
-		if _story_l4_mirror_swipes <= 0:
-			_story_l4_turns_until_mirror -= 1
-			if _story_l4_turns_until_mirror <= 0:
-				_story_l4_mirror_swipes = 3
-				_story_l4_turns_until_mirror = randi_range(4, 6)
-				_show_remap_banner("🪞 MIRROR CURSE: SWIPES REVERSED! 🪞")
-				sfx.play_pitched("combo", 0.72)
-				_haptic_danger()
-		var prev_true: String = _story_l4_true_dir
-		var cands: Array[String] = []
-		for d: String in all_dirs:
-			if d != prev_true:
-				cands.append(d)
-		_story_l4_true_dir = cands.pick_random()
-		var hp_ratio: float = clampf(float(story_boss_hp) / float(maxi(1, story_boss_max_hp)), 0.0, 1.0)
-		# Reveal window shrinks as the Maestro weakens (0.65s -> 0.42s)
-		_story_l4_reveal_left = lerpf(0.42, 0.65, hp_ratio)
-		current_time_limit += _story_l4_reveal_left + 0.12
-	else:
-		# PHASE 1 — MELODY: keep the current melody until it's completed or broken
-		_story_l4_true_dir = ""
-		_story_l4_reveal_left = 0.0
-		if _story_l4_sequence.is_empty():
-			_build_story_l4_sequence()
-		current_time_limit += 0.10
-
-	if _story_l4_mirror_swipes > 0:
-		current_time_limit += 0.18
-	time_left_in_turn = current_time_limit
-
-	_boss_throw_anim = 1.0
-	_update_story_boss_labels()
-	_apply_board_colors()
-	_pulse_center()
-
-
-func _on_story_level4_swipe(raw_dir: String) -> void:
-	var direction: String = raw_dir
-	if _story_l4_mirror_swipes > 0:
-		direction = _story_l4_opposite(raw_dir)
-		_story_l4_mirror_swipes -= 1
-
-	# PHASE 2 — MASQUERADE
-	if _are_all_boss_parts_destroyed():
-		if _story_l4_true_dir != "" and direction == _story_l4_true_dir:
-			_story_l4_true_dir = ""
-			_story_l4_reveal_left = 0.0
-			_on_story_boss_hit(direction)
-		else:
-			_on_story_level4_mistake(direction, true)
-		return
-
-	# PHASE 1 — MELODY
-	if _story_l4_sequence.is_empty():
-		_build_story_l4_sequence()
-	if _story_l4_sequence.is_empty():
-		return
-	var expected: String = _story_l4_sequence[_story_l4_seq_index]
-	if direction != expected:
-		_on_story_level4_mistake(direction, false)
-		return
-
-	_story_l4_seq_index += 1
-	var dmg: int = 1
-	if _story_l4_seq_index >= _story_l4_sequence.size():
-		# Melody complete! Final note strikes as an ENCORE (double damage)
-		dmg = 2
-		_story_l4_sequence.clear()
-		_story_l4_seq_index = 0
-		# Predict whether an instrument is silenced by this hit to decide on a Mirror Curse
-		var cur_hp: int = int(story_part_hp.get(direction, 0))
-		var broken_after: int = 4 - _get_alive_boss_parts().size() + (1 if (cur_hp > 0 and cur_hp <= dmg) else 0)
-		if broken_after >= 1 and broken_after < 4 and _story_l4_mirror_swipes <= 0:
-			_story_l4_turns_until_mirror -= 1
-			if _story_l4_turns_until_mirror <= 0 or randf() < 0.35:
-				_story_l4_mirror_pending = true
-				_story_l4_turns_until_mirror = 3
-	_on_story_boss_hit(direction, dmg)
-
-
-func _on_story_level4_mistake(direction: String, is_decoy: bool) -> void:
-	var pos := _get_board_center(direction)
-	var true_dir_was: String = _story_l4_true_dir
-	_story_l4_sequence.clear()
-	_story_l4_seq_index = 0
-	_story_l4_mirror_swipes = 0
-	_story_l4_mirror_pending = false
-	_story_l4_true_dir = ""
-	_story_l4_reveal_left = 0.0
-	_story_last_swiped_dir = direction
-	_boss_taunt_anim = 1.0
-
-	_flash_square(direction, Color(1.7, 0.25, 0.35, 0.98))
-	if is_decoy and true_dir_was != "" and true_dir_was != direction:
-		# Briefly show where the True Mask actually was
-		_flash_square(true_dir_was, Color(1.6, 1.25, 0.35, 0.9))
-	_burst_particles(pos, Color(1.5, 0.3, 0.35), 22)
-	_burst_particles(pos, Color(1.0, 0.85, 0.4), 12)
-	_burst_at(pos, Color(1.4, 0.25, 0.3))
-
-	lives -= 1
-	_lost_heart_this_game = true
-	streak = 0
-	perfect_streak = 0
-	_audio_pulse = 0.9
-
-	sfx.play("wrong")
-	_haptic_danger()
-	_shake_screen(14.0)
-	_flash_center_red()
-	if is_decoy:
-		_show_persistent_label("🎭 DECOY MASK! -1 HP", pos, Color(1.0, 0.42, 0.50), true)
-	else:
-		_show_persistent_label("🎻 OFF-KEY! -1 HP (MELODY RESET)", pos, Color(1.0, 0.55, 0.45), true)
-	_update_lives_display()
-	_update_story_boss_labels()
-	_apply_board_colors()
-
-	if lives <= 0:
-		_game_over()
-	else:
-		start_new_turn()
+	return _story_manager.story_l4_opposite(dir) if _story_manager != null else dir
 
 
 func _apply_story_level4_square_style(style: StyleBoxFlat, dir: String) -> void:
-	var col: Color = direction_colors.get(dir, Color.WHITE)
-	var gold_highlight: bool = false
-	if _are_all_boss_parts_destroyed():
-		if _story_l4_reveal_left > 0.0 and dir == _story_l4_true_dir:
-			_apply_skin_to_square_style(style, col, false)
-			style.set_border_width_all(4)
-			style.set_border_color(Color(1.6, 1.25, 0.35, 0.98))
-			style.set_shadow_color(Color(1.3, 0.9, 0.2, 0.80))
-			style.set_shadow_size(20)
-			gold_highlight = true
-		else:
-			# Identical masquerade squares — colors hidden!
-			style.bg_color = Color(0.13, 0.07, 0.17, 0.96)
-			style.set_border_width_all(3)
-			style.set_border_color(Color(0.75, 0.62, 0.95, 0.85))
-			style.set_shadow_color(Color(0.55, 0.30, 0.85, 0.45))
-			style.set_shadow_size(10)
-	else:
-		_apply_skin_to_square_style(style, col, false)
-		if int(story_part_hp.get(dir, 0)) <= 0:
-			style.bg_color = col.darkened(0.55)
-		var note_idx: int = _story_l4_sequence.find(dir)
-		if note_idx >= 0 and note_idx == _story_l4_seq_index:
-			style.set_border_width_all(4)
-			style.set_border_color(Color(1.6, 1.25, 0.35, 0.98))
-			style.set_shadow_color(Color(1.3, 0.9, 0.2, 0.78))
-			style.set_shadow_size(18)
-			gold_highlight = true
-		elif note_idx > _story_l4_seq_index:
-			style.set_border_width_all(3)
-			style.set_border_color(Color(1.0, 0.55, 0.75, 0.88))
-			style.set_shadow_color(Color(0.9, 0.3, 0.55, 0.45))
-			style.set_shadow_size(10)
-	if _story_l4_mirror_swipes > 0 and not gold_highlight:
-		style.set_border_width_all(3)
-		style.set_border_color(Color(0.85, 0.95, 1.25, 0.95))
-		style.set_shadow_color(Color(0.65, 0.85, 1.1, 0.55))
-		style.set_shadow_size(12)
+	if _story_manager != null:
+		_story_manager.apply_story_level4_square_style(style, dir)
 
 
-func _draw_story_l4_centered_text(canvas: CanvasItem, c: Vector2, txt: String, fs: int, col: Color, outline_col: Color) -> void:
-	var font: Font = ThemeDB.fallback_font
-	if font == null:
-		return
-	var t_size: Vector2 = font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
-	var baseline: Vector2 = Vector2(c.x - t_size.x * 0.5, c.y + (font.get_ascent(fs) - font.get_descent(fs)) * 0.5)
-	canvas.draw_string_outline(font, baseline, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, maxi(2, fs / 6), outline_col)
-	canvas.draw_string(font, baseline, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
-
-
-func _draw_story_level4_square_overlay(panel: Panel, dir: String) -> void:
-	if panel == null or not is_instance_valid(panel):
-		return
-	var s: Vector2 = panel.size
-	var c: Vector2 = s * 0.5
-	var sf: float = minf(s.x, s.y) / 100.0
-	var t: float = _boss_anim_time
-
-	if _are_all_boss_parts_destroyed():
-		# MASQUERADE masks
-		var kind: int = 0
-		if _story_l4_reveal_left > 0.0:
-			kind = 1 if dir == _story_l4_true_dir else 2
-		_draw_story_maestro_mask(panel, c, sf * 1.15, kind)
-	else:
-		var note_idx: int = _story_l4_sequence.find(dir)
-		if note_idx >= _story_l4_seq_index and note_idx >= 0:
-			var is_next: bool = (note_idx == _story_l4_seq_index)
-			var pulse: float = 1.0 + (sin(t * 11.0) * 0.09 if is_next else 0.0)
-			var r: float = (27.0 if is_next else 22.0) * sf * pulse
-			var ring_col: Color = Color(1.0, 0.85, 0.35, 0.98) if is_next else Color(1.0, 0.55, 0.78, 0.75)
-			panel.draw_circle(c, r, Color(0.10, 0.04, 0.10, 0.88 if is_next else 0.70))
-			panel.draw_arc(c, r, 0.0, TAU, 32, ring_col, (4.0 if is_next else 2.5) * sf, true)
-			if is_next:
-				panel.draw_arc(c, r + 6.0 * sf, t * 4.0, t * 4.0 + PI * 1.2, 20, Color(1.0, 0.92, 0.55, 0.65), 2.2 * sf, true)
-			var num_col: Color = Color(1.0, 0.95, 0.70, 1.0) if is_next else Color(1.0, 0.80, 0.90, 0.85)
-			_draw_story_l4_centered_text(panel, c, str(note_idx + 1), int((30.0 if is_next else 24.0) * sf), num_col, Color(0.10, 0.02, 0.08, 1.0))
-			# Tiny music note badge in the corner of the rune
-			_draw_story_music_note(panel, c + Vector2(r * 0.85, -r * 0.85), 0.55 * sf, ring_col)
-		else:
-			_draw_symbol_on_panel(panel, dir)
-			if int(story_part_hp.get(dir, 0)) <= 0:
-				# Silenced instrument: mute slash
-				panel.draw_line(c + Vector2(-20, -20) * sf, c + Vector2(20, 20) * sf, Color(0.10, 0.04, 0.08, 0.85), 6.0 * sf, true)
-				panel.draw_line(c + Vector2(-20, -20) * sf, c + Vector2(20, 20) * sf, Color(1.0, 0.45, 0.50, 0.85), 3.0 * sf, true)
-
-	# Mirror Curse: shimmering glass sheen + reversed-arrow badge on every square
-	if _story_l4_mirror_swipes > 0:
-		var sweep: float = fmod(t * 0.9, 1.6) - 0.3
-		var x0: float = s.x * sweep
-		panel.draw_line(Vector2(x0, s.y), Vector2(x0 + s.y * 0.6, 0.0), Color(0.85, 0.95, 1.0, 0.30), 10.0 * sf, true)
-		panel.draw_line(Vector2(x0 + 14.0 * sf, s.y), Vector2(x0 + 14.0 * sf + s.y * 0.6, 0.0), Color(1.0, 1.0, 1.0, 0.22), 4.0 * sf, true)
-		var bc: Vector2 = Vector2(s.x - 16.0 * sf, 16.0 * sf)
-		panel.draw_circle(bc, 11.0 * sf, Color(0.08, 0.10, 0.20, 0.85))
-		panel.draw_arc(bc, 11.0 * sf, 0.0, TAU, 20, Color(0.80, 0.92, 1.0, 0.95), 1.8 * sf, true)
-		var a_col := Color(0.85, 0.95, 1.0, 0.98)
-		panel.draw_line(bc + Vector2(-6, -2.5) * sf, bc + Vector2(6, -2.5) * sf, a_col, 1.8 * sf, true)
-		panel.draw_line(bc + Vector2(6, -2.5) * sf, bc + Vector2(3, -5.5) * sf, a_col, 1.8 * sf, true)
-		panel.draw_line(bc + Vector2(-6, 2.5) * sf, bc + Vector2(6, 2.5) * sf, a_col, 1.8 * sf, true)
-		panel.draw_line(bc + Vector2(-6, 2.5) * sf, bc + Vector2(-3, 5.5) * sf, a_col, 1.8 * sf, true)
+func _draw_story_white_center_emblem(panel: Panel) -> void:
+	if _story_manager != null and _story_manager.renderer != null:
+		_story_manager.renderer._draw_story_white_center_emblem(panel)
 
 
 func _draw_story_maestro_center_emblem(panel: Panel) -> void:
-	if panel == null or not is_instance_valid(panel):
-		return
-	var s: Vector2 = panel.size
-	var c: Vector2 = s * 0.5
-	var sf: float = minf(s.x, s.y) / 100.0
-	var t: float = _boss_anim_time
-	var all_dead := _are_all_boss_parts_destroyed()
-	var pulse: float = 1.0 + sin(t * 7.0) * 0.07
-
-	# Mirror Curse halo + reversed double arrows
-	if _story_l4_mirror_swipes > 0:
-		panel.draw_arc(c, 40.0 * sf, t * 2.0, t * 2.0 + TAU, 36, Color(0.45, 0.65, 1.0, 0.70), 3.5 * sf, true)
-		var m_col := Color(0.30, 0.45, 0.85, 0.85)
-		panel.draw_line(c + Vector2(0, -34) * sf, c + Vector2(0, 34) * sf, m_col, 2.4 * sf, true)
-		panel.draw_line(c + Vector2(-34, 0) * sf, c + Vector2(34, 0) * sf, m_col, 2.4 * sf, true)
-		for tip: Vector2 in [Vector2(0, -34), Vector2(0, 34), Vector2(-34, 0), Vector2(34, 0)]:
-			var tp: Vector2 = c + tip * sf
-			var back: Vector2 = -tip.normalized() * 7.0 * sf
-			var side: Vector2 = Vector2(-back.y, back.x) * 0.7
-			panel.draw_colored_polygon(PackedVector2Array([tp, tp + back + side, tp + back - side]), m_col)
-
-	# Central conductor's music note
-	var note_col: Color = Color(0.85, 0.18, 0.30, 0.96) if all_dead else Color(0.20, 0.10, 0.28, 0.96)
-	_draw_story_music_note(panel, c + Vector2(0.0, -4.0 * sf), 2.0 * sf * pulse, note_col)
-
-	# Melody progress pips (Phase 1)
-	if not all_dead and not _story_l4_sequence.is_empty():
-		var n: int = _story_l4_sequence.size()
-		var spacing: float = 12.0 * sf
-		var start_x: float = c.x - spacing * float(n - 1) * 0.5
-		for i in range(n):
-			var pp: Vector2 = Vector2(start_x + spacing * float(i), c.y + 26.0 * sf)
-			if i < _story_l4_seq_index:
-				panel.draw_circle(pp, 4.2 * sf, Color(1.0, 0.72, 0.18, 0.98))
-			elif i == _story_l4_seq_index:
-				panel.draw_circle(pp, 4.6 * sf * pulse, Color(1.0, 0.85, 0.35, 0.55))
-				panel.draw_arc(pp, 4.6 * sf * pulse, 0.0, TAU, 14, Color(0.55, 0.30, 0.05, 0.98), 1.8 * sf, true)
-			else:
-				panel.draw_arc(pp, 4.0 * sf, 0.0, TAU, 14, Color(0.35, 0.20, 0.40, 0.85), 1.6 * sf, true)
+	if _story_manager != null and _story_manager.renderer != null:
+		_story_manager.renderer._draw_story_maestro_center_emblem(panel)
 
 
-func _draw_story_music_note(canvas: CanvasItem, pos: Vector2, scale_f: float, col: Color) -> void:
-	# Eighth note: tilted head, stem & flag
-	var head_c: Vector2 = pos + Vector2(-3.5, 6.0) * scale_f
-	var head_pts := PackedVector2Array()
-	for i in range(14):
-		var a: float = float(i) / 14.0 * TAU
-		var p := Vector2(cos(a) * 5.2, sin(a) * 3.8).rotated(-0.45)
-		head_pts.append(head_c + p * scale_f)
-	canvas.draw_colored_polygon(head_pts, col)
-	var stem_bot: Vector2 = head_c + Vector2(4.4, -1.6) * scale_f
-	var stem_top: Vector2 = stem_bot + Vector2(0.0, -15.0) * scale_f
-	canvas.draw_line(stem_bot, stem_top, col, maxf(1.2, 1.9 * scale_f), true)
-	canvas.draw_polyline(PackedVector2Array([
-		stem_top,
-		stem_top + Vector2(5.0, 4.0) * scale_f,
-		stem_top + Vector2(6.0, 9.0) * scale_f,
-	]), col, maxf(1.2, 2.0 * scale_f), true)
+func _draw_story_level4_square_overlay(panel: Panel, dir: String) -> void:
+	if _story_manager != null and _story_manager.renderer != null:
+		_story_manager.renderer._draw_story_level4_square_overlay(panel, dir)
 
 
-# kind: 0 = hidden identical mask, 1 = TRUE (gold crown), 2 = revealed decoy, 3 = enraged boss face
-func _draw_story_maestro_mask(canvas: CanvasItem, c: Vector2, sf: float, kind: int) -> void:
-	var t: float = _boss_anim_time
-	var sway: float = sin(t * 2.4) * 0.06
-	var face_col: Color
-	var rim_col: Color
-	var eye_col: Color
-	match kind:
-		1:
-			face_col = Color(1.0, 0.95, 0.85, 0.98)
-			rim_col = Color(1.0, 0.78, 0.25, 0.98)
-			eye_col = Color(1.0, 0.85, 0.30, 1.0)
-		2:
-			face_col = Color(0.42, 0.30, 0.52, 0.92)
-			rim_col = Color(0.75, 0.35, 0.85, 0.85)
-			eye_col = Color(1.0, 0.25, 0.35, 0.95)
-		3:
-			face_col = Color(0.98, 0.92, 0.90, 0.98)
-			rim_col = Color(1.0, 0.30, 0.38, 0.98)
-			eye_col = Color(1.0, 0.18, 0.28, 1.0)
-		_:
-			face_col = Color(0.82, 0.80, 0.92, 0.95)
-			rim_col = Color(0.70, 0.60, 0.95, 0.92)
-			eye_col = Color(0.65, 0.40, 1.0, 0.75 + 0.2 * sin(t * 5.0))
-
-	# Face outline (oval with pointed chin)
-	var face := PackedVector2Array()
-	for i in range(22):
-		var a: float = float(i) / 22.0 * TAU
-		var y_scale: float = 24.0 if sin(a) < 0.0 else 28.0
-		var p := Vector2(cos(a) * 20.0, sin(a) * y_scale)
-		if sin(a) > 0.6:
-			p.x *= 1.0 - (sin(a) - 0.6) * 0.9
-		face.append(c + p.rotated(sway) * sf)
-	var face_closed := face.duplicate()
-	face_closed.append(face[0])
-	canvas.draw_colored_polygon(face, face_col)
-	canvas.draw_polyline(face_closed, rim_col, maxf(1.2, 2.6 * sf), true)
-
-	# Slanted eye holes
-	for side: float in [-1.0, 1.0]:
-		var e_c: Vector2 = c + Vector2(8.5 * side, -4.0).rotated(sway) * sf
-		var eye := PackedVector2Array([
-			e_c + Vector2(-6.0 * side, 1.5).rotated(sway) * sf,
-			e_c + Vector2(0.0, -3.5).rotated(sway) * sf,
-			e_c + Vector2(6.0 * side, -1.5).rotated(sway) * sf,
-			e_c + Vector2(0.0, 3.0).rotated(sway) * sf,
-		])
-		canvas.draw_colored_polygon(eye, Color(0.06, 0.02, 0.08, 0.98))
-		canvas.draw_circle(e_c, 2.0 * sf, eye_col)
-
-	# Mouth
-	if kind == 3 or kind == 2:
-		canvas.draw_polyline(PackedVector2Array([
-			c + Vector2(-7, 12).rotated(sway) * sf,
-			c + Vector2(-2, 9).rotated(sway) * sf,
-			c + Vector2(2, 13).rotated(sway) * sf,
-			c + Vector2(7, 10).rotated(sway) * sf,
-		]), Color(0.10, 0.02, 0.06, 0.95), maxf(1.0, 2.0 * sf), true)
-	else:
-		canvas.draw_arc(c + Vector2(0, 8).rotated(sway) * sf, 6.0 * sf, 0.35, PI - 0.35, 10, Color(0.15, 0.05, 0.12, 0.9), maxf(1.0, 2.0 * sf), true)
-
-	# Crack for decoy / enraged
-	if kind == 2 or kind == 3:
-		canvas.draw_polyline(PackedVector2Array([
-			c + Vector2(4, -24).rotated(sway) * sf,
-			c + Vector2(1, -14).rotated(sway) * sf,
-			c + Vector2(6, -8).rotated(sway) * sf,
-			c + Vector2(3, 0).rotated(sway) * sf,
-		]), Color(0.12, 0.02, 0.06, 0.92), maxf(1.0, 1.8 * sf), true)
-
-	# Golden crown on the TRUE mask
-	if kind == 1:
-		var crown_base: float = -24.0
-		var crown := PackedVector2Array([
-			c + Vector2(-14, crown_base).rotated(sway) * sf,
-			c + Vector2(-16, crown_base - 12).rotated(sway) * sf,
-			c + Vector2(-7, crown_base - 5).rotated(sway) * sf,
-			c + Vector2(0, crown_base - 15).rotated(sway) * sf,
-			c + Vector2(7, crown_base - 5).rotated(sway) * sf,
-			c + Vector2(16, crown_base - 12).rotated(sway) * sf,
-			c + Vector2(14, crown_base).rotated(sway) * sf,
-		])
-		canvas.draw_colored_polygon(crown, Color(1.0, 0.80, 0.22, 0.98))
-		canvas.draw_circle(c + Vector2(0, crown_base - 15).rotated(sway) * sf, 2.4 * sf, Color(1.0, 0.35, 0.40, 1.0))
-	elif kind == 0:
-		# Mysterious "?" swirl for hidden masks
-		canvas.draw_arc(c, 32.0 * sf, -t * 1.6, -t * 1.6 + PI * 1.3, 20, Color(0.75, 0.55, 1.0, 0.55), 2.2 * sf, true)
+func _draw_story_void_rift_icon(panel: Panel) -> void:
+	if _story_manager != null and _story_manager.renderer != null:
+		_story_manager.renderer._draw_story_void_rift_icon(panel)
 
 
-func _draw_story_level4_preview() -> void:
-	if _story_level4_preview_ctrl == null or not is_instance_valid(_story_level4_preview_ctrl):
-		return
-	var s: Vector2 = _story_level4_preview_ctrl.size
-	var c: Vector2 = Vector2(s.x * 0.5, s.y * 0.54)
-	_story_level4_preview_ctrl.draw_circle(c, 46.0, Color(0.14, 0.03, 0.07, 0.88))
-	_story_level4_preview_ctrl.draw_arc(c, 46.0, 0.0, TAU, 36, Color(1.0, 0.70, 0.30, 0.62), 2.0, true)
-	_draw_phantom_maestro_figure(_story_level4_preview_ctrl, c + Vector2(0.0, 4.0), 0.34, true)
-	if settings == null or not settings.is_story_level_cleared(3):
-		_draw_story_locked_overlay(_story_level4_preview_ctrl, c)
+func _draw_story_hydra_shield_icon(panel: Panel) -> void:
+	if _story_manager != null and _story_manager.renderer != null:
+		_story_manager.renderer._draw_story_hydra_shield_icon(panel)
 
 
-func _draw_phantom_maestro_figure(canvas: Control, origin: Vector2, scale_f: float = 1.0, is_preview: bool = false) -> void:
-	if not is_preview and _boss_death_progress > 0.88:
-		return
+func _draw_story_bomb_icon(panel: Panel) -> void:
+	if _story_manager != null and _story_manager.renderer != null:
+		_story_manager.renderer._draw_story_bomb_icon(panel)
 
-	var death_scale: float = 1.0
-	if not is_preview and _boss_death_progress > 0.60:
-		death_scale = clampf(1.0 - (_boss_death_progress - 0.60) / 0.28, 0.0, 1.0)
-	scale_f *= death_scale
 
-	var t: float = _boss_anim_time
-	var enraged: bool = story_boss_enraged and not is_preview
-	var rage_mult: float = 1.65 if enraged else 1.0
-	var hover_y: float = sin(t * 2.6 * rage_mult) * 7.0 * scale_f
+func _draw_story_hydra_regrow_badge(panel: Panel) -> void:
+	if _story_manager != null and _story_manager.renderer != null:
+		_story_manager.renderer._draw_story_hydra_regrow_badge(panel)
 
-	var shake_vec := Vector2.ZERO
-	if not is_preview and (_boss_hit_shake > 0.01 or _boss_death_progress > 0.01):
-		var sh_amp: float = (_boss_hit_shake * 9.0 + _boss_death_progress * 24.0) * scale_f
-		shake_vec = Vector2(randf_range(-sh_amp, sh_amp), randf_range(-sh_amp, sh_amp))
 
-	var taunt_hop: float = -sin(_boss_taunt_anim * PI * 2.0) * 14.0 * scale_f if not is_preview else 0.0
-	var root_pos: Vector2 = origin + Vector2(0.0, hover_y + taunt_hop) + shake_vec
-
-	var cols: Dictionary = {}
-	var dead: Dictionary = {}
-	var defaults: Dictionary = {
-		"up": Color(1.0, 0.25, 0.45), "down": Color(1.0, 0.85, 0.20),
-		"left": Color(0.20, 0.95, 0.55), "right": Color(0.25, 0.65, 1.0),
-	}
-	var death_glow: float = clampf(_boss_death_progress * 1.4, 0.0, 1.0) if not is_preview else 0.0
-	for d: String in ["up", "down", "left", "right"]:
-		var col: Color = direction_colors.get(d, defaults[d])
-		var is_dead: bool = (not is_preview and int(story_part_hp.get(d, 1)) <= 0)
-		if is_dead:
-			col = col.darkened(0.68)
-		if not is_preview:
-			col = col.lerp(Color(2.0, 2.0, 2.2), maxf(death_glow, clampf(float(_boss_part_flash.get(d, 0.0)), 0.0, 1.0)))
-		cols[d] = col
-		dead[d] = is_dead
-
-	var death_split: float = (_boss_death_progress * _boss_death_progress * 145.0 * scale_f) if not is_preview else 0.0
-	var rec: Dictionary = {}
-	for d: String in ["up", "down", "left", "right"]:
-		rec[d] = (float(_boss_part_recoil.get(d, 0.0)) * 18.0 * scale_f) if not is_preview else 0.0
-
-	var gold := Color(1.0, 0.78, 0.30, 0.95)
-	var lw: float = maxf(1.2, 2.6 * scale_f)
-
-	# 1. Rotating musical staff rings (5 lines) behind the Maestro
-	for i in range(5):
-		var rr: float = (86.0 + float(i) * 5.0) * scale_f
-		var a0: float = t * 0.45 * rage_mult + float(i) * 0.12
-		var staff_col := Color(1.0, 0.35, 0.40, 0.22) if enraged else Color(1.0, 0.80, 0.40, 0.18)
-		canvas.draw_arc(root_pos + Vector2(0.0, -20.0 * scale_f), rr, a0, a0 + PI * 1.25, 30, staff_col, maxf(1.0, 1.4 * scale_f), true)
-
-	# 2. Flowing phantom cloak with wavy hem
-	var wave1: float = sin(t * 3.4) * 6.0 * scale_f
-	var wave2: float = sin(t * 3.4 + 1.7) * 6.0 * scale_f
-	var cloak := PackedVector2Array([
-		root_pos + Vector2(0.0, -64.0) * scale_f,
-		root_pos + Vector2(22.0, -56.0) * scale_f,
-		root_pos + Vector2(48.0, -18.0) * scale_f,
-		root_pos + Vector2(56.0, 38.0) * scale_f + Vector2(0.0, wave1),
-		root_pos + Vector2(32.0, 54.0) * scale_f + Vector2(0.0, wave2),
-		root_pos + Vector2(12.0, 44.0) * scale_f + Vector2(0.0, wave1),
-		root_pos + Vector2(-12.0, 56.0) * scale_f + Vector2(0.0, wave2),
-		root_pos + Vector2(-32.0, 46.0) * scale_f + Vector2(0.0, wave1),
-		root_pos + Vector2(-56.0, 40.0) * scale_f + Vector2(0.0, wave2),
-		root_pos + Vector2(-48.0, -18.0) * scale_f,
-		root_pos + Vector2(-22.0, -56.0) * scale_f,
-	])
-	var cloak_closed := cloak.duplicate()
-	cloak_closed.append(cloak[0])
-	var cloak_col := Color(0.30, 0.04, 0.10, 0.97) if enraged else Color(0.22, 0.05, 0.13, 0.97)
-	canvas.draw_colored_polygon(cloak, cloak_col)
-	canvas.draw_polyline(cloak_closed, gold, lw, true)
-	# Hood shadow
-	canvas.draw_circle(root_pos + Vector2(0.0, -30.0) * scale_f, 30.0 * scale_f, Color(0.05, 0.01, 0.04, 0.92))
-	# Gold lapel trim
-	canvas.draw_line(root_pos + Vector2(-14.0, 0.0) * scale_f, root_pos + Vector2(0.0, 30.0) * scale_f, gold, lw, true)
-	canvas.draw_line(root_pos + Vector2(14.0, 0.0) * scale_f, root_pos + Vector2(0.0, 30.0) * scale_f, gold, lw, true)
-
-	# 3. Porcelain Maestro mask
-	_draw_story_maestro_mask(canvas, root_pos + Vector2(0.0, -30.0) * scale_f, 1.25 * scale_f, 3 if enraged else 1)
-
-	# 4. Conducting arm & baton (sweeps harder when launching notes)
-	var shoulder: Vector2 = root_pos + Vector2(34.0, -10.0) * scale_f
-	var conduct: float = sin(t * 4.2 * rage_mult) * 0.55 + (_boss_throw_anim * 0.9 if not is_preview else 0.0)
-	var arm_ang: float = -0.75 - conduct
-	var hand: Vector2 = shoulder + Vector2(cos(arm_ang), sin(arm_ang)) * 30.0 * scale_f
-	var baton_tip: Vector2 = hand + Vector2(cos(arm_ang - 0.35), sin(arm_ang - 0.35)) * 32.0 * scale_f
-	canvas.draw_line(shoulder, hand, cloak_col.lightened(0.15), maxf(2.0, 8.0 * scale_f), true)
-	canvas.draw_circle(hand, 5.0 * scale_f, Color(0.95, 0.92, 0.88, 0.98))
-	canvas.draw_line(hand, baton_tip, Color(1.0, 1.0, 1.0, 0.98), maxf(1.0, 2.4 * scale_f), true)
-	canvas.draw_circle(baton_tip, 4.5 * scale_f, Color(1.0, 0.85, 0.35, 0.55 + 0.35 * absf(sin(t * 6.0))))
-	# Off-hand
-	var shoulder_l: Vector2 = root_pos + Vector2(-34.0, -10.0) * scale_f
-	var hand_l: Vector2 = shoulder_l + Vector2(-22.0, 14.0 + sin(t * 2.2) * 6.0) * scale_f
-	canvas.draw_line(shoulder_l, hand_l, cloak_col.lightened(0.15), maxf(2.0, 8.0 * scale_f), true)
-	canvas.draw_circle(hand_l, 5.0 * scale_f, Color(0.95, 0.92, 0.88, 0.98))
-
-	# 5. Four floating instruments (BELL / DRUM / HARP / HORN), colored by the live board colors
-	var bob1: float = sin(t * 3.0) * 5.0 * scale_f
-	var bob2: float = sin(t * 3.0 + 2.0) * 5.0 * scale_f
-	var bob3: float = sin(t * 3.0 + 4.0) * 5.0 * scale_f
-	var up_c: Vector2 = root_pos + Vector2(0.0, -90.0 * scale_f - float(rec["up"]) - death_split + bob1)
-	var down_c: Vector2 = root_pos + Vector2(0.0, 58.0 * scale_f + float(rec["down"]) + death_split + bob2 * 0.5)
-	var left_c: Vector2 = root_pos + Vector2(-112.0 * scale_f - float(rec["left"]) - death_split, -4.0 * scale_f + bob2)
-	var right_c: Vector2 = root_pos + Vector2(112.0 * scale_f + float(rec["right"]) + death_split, -4.0 * scale_f + bob3)
-
-	# BELL (up) — swinging
-	var bell_rot: float = sin(t * 4.5) * 0.28
-	var bell_pts_local: Array[Vector2] = [
-		Vector2(-6, -18), Vector2(6, -18), Vector2(10, -8), Vector2(12, 6),
-		Vector2(20, 14), Vector2(-20, 14), Vector2(-12, 6), Vector2(-10, -8),
-	]
-	var bell := PackedVector2Array()
-	for p: Vector2 in bell_pts_local:
-		bell.append(up_c + p.rotated(bell_rot) * scale_f)
-	var bell_closed := bell.duplicate()
-	bell_closed.append(bell[0])
-	canvas.draw_colored_polygon(bell, cols["up"])
-	canvas.draw_polyline(bell_closed, Color(1.0, 1.0, 1.0, 0.32 if dead["up"] else 0.92), lw, true)
-	canvas.draw_circle(up_c + Vector2(0, -21).rotated(bell_rot) * scale_f, 4.0 * scale_f, gold)
-	canvas.draw_circle(up_c + Vector2(sin(t * 4.5 + 0.8) * 4.0, 18).rotated(bell_rot) * scale_f, 4.5 * scale_f, Color(1.0, 1.0, 1.0, 0.35 if dead["up"] else 0.95))
-
-	# DRUM (down)
-	var drum_body := PackedVector2Array([
-		down_c + Vector2(-26, -8) * scale_f, down_c + Vector2(26, -8) * scale_f,
-		down_c + Vector2(24, 14) * scale_f, down_c + Vector2(-24, 14) * scale_f,
-	])
-	canvas.draw_colored_polygon(drum_body, cols["down"])
-	var drum_top := PackedVector2Array()
-	for i in range(18):
-		var a: float = float(i) / 18.0 * TAU
-		drum_top.append(down_c + Vector2(cos(a) * 26.0, -8.0 + sin(a) * 6.0) * scale_f)
-	canvas.draw_colored_polygon(drum_top, cols["down"].lightened(0.35))
-	var drum_top_closed := drum_top.duplicate()
-	drum_top_closed.append(drum_top[0])
-	var drum_line := Color(1.0, 1.0, 1.0, 0.32 if dead["down"] else 0.92)
-	canvas.draw_polyline(drum_top_closed, drum_line, lw, true)
-	canvas.draw_polyline(PackedVector2Array([
-		down_c + Vector2(-24, -2) * scale_f, down_c + Vector2(-12, 12) * scale_f, down_c + Vector2(0, -2) * scale_f,
-		down_c + Vector2(12, 12) * scale_f, down_c + Vector2(24, -2) * scale_f,
-	]), drum_line, maxf(1.0, 1.8 * scale_f), true)
-	if not dead["down"]:
-		var stick_hit: float = absf(sin(t * 7.0 * rage_mult)) * 8.0
-		canvas.draw_line(down_c + Vector2(-30, -26 + stick_hit) * scale_f, down_c + Vector2(-8, -10) * scale_f, gold, maxf(1.0, 2.2 * scale_f), true)
-		canvas.draw_line(down_c + Vector2(30, -26 + (8.0 - stick_hit)) * scale_f, down_c + Vector2(8, -10) * scale_f, gold, maxf(1.0, 2.2 * scale_f), true)
-
-	# HARP (left)
-	var harp_frame := PackedVector2Array([
-		left_c + Vector2(-14, 24) * scale_f, left_c + Vector2(-14, -26) * scale_f,
-		left_c + Vector2(4, -20) * scale_f, left_c + Vector2(18, -8) * scale_f,
-		left_c + Vector2(18, 24) * scale_f, left_c + Vector2(-14, 24) * scale_f,
-	])
-	canvas.draw_polyline(harp_frame, cols["left"], maxf(2.0, 6.0 * scale_f), true)
-	canvas.draw_polyline(harp_frame, Color(1.0, 1.0, 1.0, 0.25 if dead["left"] else 0.70), maxf(0.8, 1.4 * scale_f), true)
-	for i in range(1, 5):
-		var sx: float = -14.0 + float(i) * 6.4
-		var top_y: float = -26.0 + (sx + 14.0) / 32.0 * 18.0
-		var vib: float = (sin(t * 22.0 + float(i)) * 1.2) if not dead["left"] else 0.0
-		canvas.draw_line(left_c + Vector2(sx, top_y) * scale_f, left_c + Vector2(sx + vib, 22.0) * scale_f, Color(1.0, 0.95, 0.80, 0.30 if dead["left"] else 0.85), maxf(0.8, 1.2 * scale_f), true)
-
-	# HORN (right)
-	var horn := PackedVector2Array([
-		right_c + Vector2(-20, -4) * scale_f, right_c + Vector2(4, -9) * scale_f,
-		right_c + Vector2(20, -20) * scale_f, right_c + Vector2(20, 20) * scale_f,
-		right_c + Vector2(4, 9) * scale_f, right_c + Vector2(-20, 4) * scale_f,
-	])
-	var horn_closed := horn.duplicate()
-	horn_closed.append(horn[0])
-	canvas.draw_colored_polygon(horn, cols["right"])
-	canvas.draw_polyline(horn_closed, Color(1.0, 1.0, 1.0, 0.32 if dead["right"] else 0.92), lw, true)
-	canvas.draw_circle(right_c + Vector2(-23, 0) * scale_f, 4.0 * scale_f, gold)
-	canvas.draw_line(right_c + Vector2(20, -20) * scale_f, right_c + Vector2(20, 20) * scale_f, gold, maxf(1.0, 3.0 * scale_f), true)
-
-	# Mute slashes over silenced instruments
-	if not is_preview:
-		var centers: Dictionary = {"up": up_c, "down": down_c, "left": left_c, "right": right_c}
-		for d: String in centers:
-			if dead[d]:
-				var pc: Vector2 = centers[d]
-				canvas.draw_line(pc + Vector2(-18, -18) * scale_f, pc + Vector2(18, 18) * scale_f, Color(1.0, 0.30, 0.38, 0.85), maxf(1.5, 3.0 * scale_f), true)
-
-	# 6. Orbiting music notes
-	for i in range(4):
-		var a: float = t * 1.1 * rage_mult + float(i) * TAU / 4.0
-		var np: Vector2 = root_pos + Vector2(cos(a) * 70.0, sin(a) * 34.0 - 18.0) * scale_f
-		var n_col := Color(1.0, 0.40, 0.45, 0.75) if enraged else Color(1.0, 0.88, 0.50, 0.72)
-		_draw_story_music_note(canvas, np, 0.85 * scale_f, n_col)
+func _draw_story_void_drain_badge(panel: Panel) -> void:
+	if _story_manager != null and _story_manager.renderer != null:
+		_story_manager.renderer._draw_story_void_drain_badge(panel)

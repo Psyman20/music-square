@@ -150,6 +150,7 @@ func _generate_all_sounds() -> void:
 	_generate_sound("correct_cyber_click", _make_correct_cyber_click_sfx)
 	_generate_sound("correct_dream_chord", _make_correct_dream_chord_sfx)
 	_generate_sound("correct_plasma_zap", _make_correct_plasma_zap_sfx)
+	_generate_sound("correct_opera_chime", _make_correct_opera_chime_sfx)
 	_generate_sound("wrong", _make_wrong_sfx)
 	_generate_sound("timeout", _make_timeout_sfx)
 	_generate_sound("combo", _make_combo_sfx)
@@ -303,6 +304,35 @@ func _make_correct_plasma_zap_sfx(sr: int) -> PackedVector2Array:
 		var pan := 0.5 + 0.35 * sin(progress * PI * 2.0)
 		var val := wave * env * 0.30
 		data[i] = Vector2(val * (1.0 - pan * 0.3), val * (0.7 + pan * 0.3))
+
+	return data
+
+
+func _make_correct_opera_chime_sfx(sr: int) -> PackedVector2Array:
+	# Opera Chime (Phantom Maestro reward): Golden orchestral bell + harp shimmer chord (D5, F#5, A5, D6)
+	var length := 0.26
+	var samples := int(sr * length)
+	var data := PackedVector2Array()
+	data.resize(samples)
+	var notes := [587.33, 739.99, 880.00, 1174.66]
+
+	for i in range(samples):
+		var t := float(i) / sr
+		var l_sum := 0.0
+		var r_sum := 0.0
+		for idx in range(notes.size()):
+			var delay := float(idx) * 0.014
+			if t < delay:
+				continue
+			var nt := t - delay
+			var env := exp(-nt * (9.5 + float(idx) * 1.2))
+			var f: float = notes[idx]
+			# Bell fundamental + bright 2x & 3x metallic harmonics
+			var bell := sin(2.0 * PI * f * nt) * 0.65 + sin(2.0 * PI * (f * 2.0) * nt) * 0.25 * exp(-nt * 12.0) + sin(2.0 * PI * (f * 3.0) * nt) * 0.12 * exp(-nt * 20.0)
+			var pan := 0.30 + 0.40 * (float(idx) / 3.0)
+			l_sum += bell * env * (1.0 - pan * 0.45)
+			r_sum += bell * env * (0.55 + pan * 0.45)
+		data[i] = Vector2(l_sum * 0.16, r_sum * 0.16)
 
 	return data
 
