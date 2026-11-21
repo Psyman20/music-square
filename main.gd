@@ -54,7 +54,7 @@ extends Control
 @onready var tutorial_understood_btn: Button = $TutorialScreen/TutorialPanel/TutorialUnderstoodBtn
 
 const CURRENT_VERSION_NAME: String = "1.2.1"
-const CURRENT_VERSION_CODE: int = 14
+const CURRENT_VERSION_CODE: int = 15
 
 # --- Game State ---
 var state: GameSettings.GameState = GameSettings.GameState.MENU
